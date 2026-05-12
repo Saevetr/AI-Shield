@@ -63,3 +63,6 @@ node index.js
 開發者: [李宜庭 / Saevetr]
 
 學校: 國立雲林科技大學 (YunTech) - 資訊管理系
+
+開啟QR code指令 npx expo start
+一定要同個網路
