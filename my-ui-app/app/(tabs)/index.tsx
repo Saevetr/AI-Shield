@@ -1,31 +1,21 @@
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { router } from "expo-router";
+import { logout } from "@/utils/auth";
 
-export default function HomeScreen() {
+export default function Home() {
   return (
     <View style={styles.container}>
+      <Text style={styles.title}>Home</Text>
 
-      <Text style={styles.title}>Welcome 👋</Text>
-      <Text style={styles.subtitle}>請登入你的帳號</Text>
-
-      <TextInput
-        placeholder="Email"
-        style={styles.input}
-        placeholderTextColor="#999"
-      />
-
-      <TextInput
-        placeholder="Password"
-        secureTextEntry
-        style={styles.input}
-        placeholderTextColor="#999"
-      />
-
-      <TouchableOpacity style={styles.button}>
-        <Text style={styles.buttonText}>登入</Text>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={async () => {
+          await logout();
+          router.replace("/login");
+        }}
+      >
+        <Text style={styles.buttonText}>登出</Text>
       </TouchableOpacity>
-
-      <Text style={styles.footer}>還沒有帳號？註冊</Text>
-
     </View>
   );
 }
@@ -33,42 +23,24 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    padding: 24,
-    backgroundColor: "#f5f7fb",
+    justifyContent: "center", // 垂直置中
+    alignItems: "center",     // 水平置中
+    backgroundColor: "#fff",
   },
   title: {
-    fontSize: 30,
+    fontSize: 26,
     fontWeight: "bold",
-    marginBottom: 6,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 30,
-  },
-  input: {
-    backgroundColor: "#fff",
-    padding: 14,
-    borderRadius: 10,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#ddd",
+    marginBottom: 20,
   },
   button: {
-    backgroundColor: "#4f46e5",
-    padding: 15,
-    borderRadius: 10,
-    alignItems: "center",
-    marginTop: 10,
+    backgroundColor: "#ef4444", // 🔥 紅色（登出感）
+    paddingVertical: 14,
+    paddingHorizontal: 40,
+    borderRadius: 12,
   },
   buttonText: {
     color: "#fff",
-    fontWeight: "bold",
-  },
-  footer: {
-    marginTop: 20,
-    textAlign: "center",
-    color: "#666",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
