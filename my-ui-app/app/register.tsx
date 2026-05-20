@@ -6,11 +6,47 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
+  Alert,
 } from "react-native";
+
 import { router } from "expo-router";
 
 export default function Register() {
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
   const [showPassword, setShowPassword] = useState(false);
+
+  const handleRegister = () => {
+    if (!username.trim()) {
+      Alert.alert("註冊失敗", "請輸入使用者名稱");
+      return;
+    }
+
+    if (!email.trim()) {
+      Alert.alert("註冊失敗", "請輸入電子郵件");
+      return;
+    }
+
+    if (password.length < 8) {
+      Alert.alert("註冊失敗", "密碼至少需要 8 位數");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert("註冊失敗", "兩次輸入的密碼不一致");
+      return;
+    }
+
+    Alert.alert("註冊成功", "請回到登入頁登入您的帳號", [
+      {
+        text: "確定",
+        onPress: () => router.replace("/"),
+      },
+    ]);
+  };
 
   return (
     <View style={styles.container}>
@@ -51,6 +87,8 @@ export default function Register() {
           style={styles.input}
           placeholder="使用者名稱"
           placeholderTextColor="#999"
+          value={username}
+          onChangeText={setUsername}
         />
       </View>
 
@@ -65,6 +103,8 @@ export default function Register() {
           placeholderTextColor="#999"
           keyboardType="email-address"
           autoCapitalize="none"
+          value={email}
+          onChangeText={setEmail}
         />
       </View>
 
@@ -78,7 +118,10 @@ export default function Register() {
           placeholder="密碼"
           placeholderTextColor="#999"
           secureTextEntry={!showPassword}
+          value={password}
+          onChangeText={setPassword}
         />
+
         <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
           <Image
             source={
@@ -101,10 +144,12 @@ export default function Register() {
           placeholder="確認密碼"
           placeholderTextColor="#999"
           secureTextEntry={!showPassword}
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
         />
       </View>
 
-      <TouchableOpacity style={styles.registerButton}>
+      <TouchableOpacity style={styles.registerButton} onPress={handleRegister}>
         <Text style={styles.registerText}>註冊</Text>
       </TouchableOpacity>
 
@@ -114,10 +159,7 @@ export default function Register() {
         <View style={styles.line} />
       </View>
 
-      <TouchableOpacity
-        style={styles.loginButton}
-        onPress={() => router.back()}
-      >
+      <TouchableOpacity style={styles.loginButton} onPress={() => router.back()}>
         <Text style={styles.loginText}>返回登入</Text>
       </TouchableOpacity>
     </View>
