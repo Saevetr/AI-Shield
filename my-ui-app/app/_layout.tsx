@@ -1,6 +1,5 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useState } from "react";
 
 export default function RootLayout() {
   return (
@@ -8,6 +7,9 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
+        <Stack.Screen name="register" />
+        <Stack.Screen name="reset-password" />
+        <Stack.Screen name="profile-detail" />
         <Stack.Screen name="(tabs)" />
       </Stack>
 

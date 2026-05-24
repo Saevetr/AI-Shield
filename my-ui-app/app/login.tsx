@@ -7,6 +7,10 @@ import {
   StyleSheet,
   Image,
   Linking,
+  Alert,
+  Modal,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from "react-native";
 
 import { router } from "expo-router";
@@ -16,8 +20,13 @@ import * as Google from "expo-auth-session/providers/google";
 // import * as AuthSession from "expo-auth-session";
 // import { signInWithCustomToken } from "firebase/auth";
 
-import { GoogleAuthProvider, signInWithCredential } from "firebase/auth";
-import { auth } from "@/app/config/firebase";
+import {
+  GoogleAuthProvider,
+  sendPasswordResetEmail,
+  signInWithCredential,
+} from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "@/app/config/firebase";
 import { setLogin } from "@/utils/auth";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -64,14 +73,72 @@ const [request, response, promptAsync] =
 }, [response]);
 
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [email, setEmail] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [isResetLoading, setIsResetLoading] = useState(false);
 
   const handleLogin = async () => {
     await setLogin(true);
     router.replace("/(tabs)");
   };
 
+  const openForgotPassword = () => {
+    setResetEmail(email);
+    setShowForgotModal(true);
+  };
+
+  const handleForgotPassword = async () => {
+    const targetEmail = resetEmail.trim().toLowerCase();
+
+    if (!targetEmail) {
+      Alert.alert("重設失敗", "請先輸入您的電子郵件");
+      return;
+    }
+
+    try {
+      setIsResetLoading(true);
+      try {
+        const registeredEmailDoc = await getDoc(
+          doc(db, "registeredEmails", encodeURIComponent(targetEmail))
+        );
+
+        if (!registeredEmailDoc.exists()) {
+          console.log("Reset email index not found:", targetEmail);
+        }
+      } catch (indexError: any) {
+        console.log(
+          "Reset email index read error:",
+          indexError?.code,
+          indexError?.message
+        );
+      }
+
+      await sendPasswordResetEmail(auth, targetEmail);
+      setShowForgotModal(false);
+      Alert.alert("已寄出重設信", "請到信箱查看密碼重設連結");
+    } catch (error: any) {
+      const errorCode = error?.code;
+
+      if (errorCode === "auth/invalid-email") {
+        Alert.alert("重設失敗", "電子郵件格式不正確");
+        return;
+      }
+
+      if (errorCode === "auth/user-not-found") {
+        Alert.alert("重設失敗", "找不到此電子郵件的帳號");
+        return;
+      }
+
+      Alert.alert("重設失敗", "目前無法寄出重設信，請稍後再試");
+    } finally {
+      setIsResetLoading(false);
+    }
+  };
+
   return (
-    
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
     <View style={styles.container}>
       <Image
         source={require("@/assets/images/hexagon.png")}
@@ -114,6 +181,10 @@ const [request, response, promptAsync] =
           style={styles.input}
           placeholder="帳號 / 電子郵件"
           placeholderTextColor="#999"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          value={email}
+          onChangeText={setEmail}
         />
       </View>
 
@@ -143,8 +214,14 @@ const [request, response, promptAsync] =
       </View>
 
       <View style={styles.optionRow}>
-        <Text style={styles.remember}>○ 記住我</Text>
-        <TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => setRememberMe(!rememberMe)}
+        >
+          <Text style={styles.remember}>
+            {rememberMe ? "⬤" : "◯"} 記住我
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={openForgotPassword}>
           <Text style={styles.forgot}>忘記密碼？</Text>
         </TouchableOpacity>
       </View>
@@ -206,7 +283,58 @@ const [request, response, promptAsync] =
         </View>
       </TouchableOpacity>
 
+      <Modal
+        visible={showForgotModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowForgotModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>忘記密碼</Text>
+            <Text style={styles.modalSubtitle}>
+              請輸入註冊時使用的電子郵件
+            </Text>
+
+            <View style={styles.modalInputBox}>
+              <Image
+                source={require("@/assets/images/user.png")}
+                style={styles.icon}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="電子郵件"
+                placeholderTextColor="#999"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={resetEmail}
+                onChangeText={setResetEmail}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={styles.modalConfirmButton}
+              onPress={handleForgotPassword}
+              disabled={isResetLoading}
+            >
+              <Text style={styles.modalConfirmText}>
+                {isResetLoading && "處理中"}
+                {!isResetLoading && "寄出重設信"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={() => setShowForgotModal(false)}
+            >
+              <Text style={styles.modalCancelText}>取消</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </View>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -218,7 +346,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 28,
     paddingTop: 38,
-    backgroundColor: "#f7f7f7",
+    backgroundColor: "#f8fbff",
   },
   logoContainer: {
   alignItems: "center",
@@ -229,15 +357,15 @@ const styles = StyleSheet.create({
 
 logoBg: {
   position: "absolute",
-  width: 250,
-  height: 150,
-  opacity: 0.4,
+  width: 230,
+  height: 140,
+  opacity: 0.26,
   zIndex: 1,
 },
 
 logo: {
-  width: 250,
-  height: 200,
+  width: 230,
+  height: 185,
 
   zIndex: 2,
 },
@@ -249,26 +377,27 @@ logo: {
   line: {
     flex: 1,
     height: 1,
-    backgroundColor: "#cfcfcf",
+    backgroundColor: "#d7e5f8",
   },
   welcome: {
     marginHorizontal: 14,
     fontSize: 17,
-    color: "#666",
+    color: "#2f62b9",
+    fontWeight: "800",
     letterSpacing: 2,
   },
   subtitle: {
     textAlign: "center",
-    color: "#777",
+    color: "#6c86aa",
     marginBottom: 18,
     fontSize: 13,
   },
   inputBox: {
     height: 48,
     borderWidth: 1,
-    borderColor: "#d7d7d7",
+    borderColor: "#dbe8f7",
     borderRadius: 11,
-    backgroundColor: "#fff",
+    backgroundColor: "#ffffff",
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 14,
@@ -281,7 +410,7 @@ logo: {
   input: {
     flex: 1,
     fontSize: 15,
-    color: "#333",
+    color: "#1f2937",
   },
   eyeIcon: {
     fontSize: 18,
@@ -292,16 +421,17 @@ logo: {
     marginBottom: 14,
   },
   remember: {
-    color: "#666",
+    color: "#6c86aa",
     fontSize: 13,
   },
   forgot: {
-    color: "#666",
+    color: "#397bf2",
     fontSize: 13,
+    fontWeight: "700",
   },
   loginButton: {
     height: 50,
-    backgroundColor: "#5f6062",
+    backgroundColor: "#397bf2",
     borderRadius: 11,
     justifyContent: "center",
     alignItems: "center",
@@ -315,7 +445,7 @@ logo: {
   },
   orText: {
     marginHorizontal: 14,
-    color: "#777",
+    color: "#8a97a8",
     fontSize: 13,
   },
   socialRow: {
@@ -326,7 +456,9 @@ logo: {
   socialButton: {
     flex: 1,
     height: 50,
-    backgroundColor: "#d7d7d75d",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e3edf9",
     borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
@@ -350,35 +482,36 @@ logo: {
   },
   socialText: {
     fontSize: 15,
-    color: "#222",
+    color: "#1f2937",
+    fontWeight: "700",
   },
   registerButton: {
     height: 50,
     borderWidth: 1,
-    borderColor: "#c9c9c9",
+    borderColor: "#c9dcf5",
     borderRadius: 11,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fafafa",
+    backgroundColor: "#edf4ff",
     opacity: 1,
     marginTop: 4,
   },
   registerText: {
     fontSize: 18,
-    color: "#333",
-    fontWeight: "600",
+    color: "#2f62b9",
+    fontWeight: "800",
   },
-  hexagonBg: {
+hexagonBg: {
   position: "absolute",
   left: 0,
   bottom: -50,
   width: 300,
   height: 300,
-  opacity: 0.6,
+  opacity: 0.32,
   zIndex: 0,
 },
 patternText: {
-  color: "#888",
+  color: "#8aa4c5",
   fontSize: 30,
   letterSpacing: 8,
 },
@@ -392,7 +525,7 @@ patternText: {
 eyeImage: {
   width: 22,
   height: 22,
-  tintColor: "#555",
+  tintColor: "#6c86aa",
 },
 
 socialIcon: {
@@ -412,5 +545,84 @@ registerIcon: {
   height: 22,
   marginRight: 10,
   resizeMode: "contain",
+},
+modalOverlay: {
+  flex: 1,
+  backgroundColor: "rgba(31, 41, 55, 0.32)",
+  alignItems: "center",
+  justifyContent: "center",
+  paddingHorizontal: 28,
+},
+modalCard: {
+  width: "100%",
+  borderRadius: 16,
+  backgroundColor: "#f8fbff",
+  paddingHorizontal: 20,
+  paddingTop: 22,
+  paddingBottom: 18,
+},
+modalTitle: {
+  color: "#1f2937",
+  fontSize: 20,
+  fontWeight: "700",
+  textAlign: "center",
+  marginBottom: 8,
+},
+modalSubtitle: {
+  color: "#6c86aa",
+  fontSize: 13,
+  textAlign: "center",
+  marginBottom: 18,
+},
+modalInputBox: {
+  height: 48,
+  borderWidth: 1,
+  borderColor: "#dbe8f7",
+  borderRadius: 11,
+  backgroundColor: "#fff",
+  flexDirection: "row",
+  alignItems: "center",
+  paddingHorizontal: 14,
+  marginBottom: 14,
+},
+modalConfirmButton: {
+  height: 48,
+  borderRadius: 11,
+  backgroundColor: "#397bf2",
+  alignItems: "center",
+  justifyContent: "center",
+  marginBottom: 10,
+},
+modalConfirmText: {
+  color: "#fff",
+  fontSize: 17,
+  fontWeight: "700",
+  letterSpacing: 2,
+},
+modalBackButton: {
+  height: 42,
+  borderRadius: 11,
+  alignItems: "center",
+  justifyContent: "center",
+  marginBottom: 10,
+},
+modalBackText: {
+  color: "#6c86aa",
+  fontSize: 15,
+  fontWeight: "600",
+},
+modalCancelButton: {
+  height: 42,
+  borderRadius: 11,
+  borderWidth: 1,
+  borderColor: "#c9dcf5",
+  backgroundColor: "#ffffff",
+  alignItems: "center",
+  justifyContent: "center",
+},
+modalCancelText: {
+  color: "#2f62b9",
+  fontSize: 15,
+  fontWeight: "700",
 },
 });

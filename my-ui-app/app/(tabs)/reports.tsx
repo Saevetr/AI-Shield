@@ -1,12 +1,12 @@
 import { SafeAreaView, StyleSheet, Text, View } from "react-native";
 
-export default function KnowledgeScreen() {
+export default function ReportsScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <Text style={styles.title}>防詐知識</Text>
+        <Text style={styles.title}>通報紀錄</Text>
         <View style={styles.panel}>
-          <Text style={styles.panelText}>防詐內容準備中</Text>
+          <Text style={styles.panelText}>目前尚無通報紀錄</Text>
         </View>
       </View>
     </SafeAreaView>
