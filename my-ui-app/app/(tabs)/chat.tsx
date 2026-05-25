@@ -153,8 +153,8 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#f8fbff" },
-  screen: { flex: 1, backgroundColor: "#f8fbff" },
+  safeArea: { flex: 1, backgroundColor: "#ffffff" },
+  screen: { flex: 1, backgroundColor: "#ffffff" },
   header: {
     height: 74,
     backgroundColor: "#ffffff",

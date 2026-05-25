@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import {
   Image,
   SafeAreaView,
@@ -17,6 +17,7 @@ const quickActions = [
     subtitle: "檢查來電風險",
     icon: "call",
     color: "#72a7ff",
+    route: "/phone-query",
   },
   {
     title: "訊息分析",
@@ -29,6 +30,7 @@ const quickActions = [
     subtitle: "檢查帳號安全性",
     image: require("@/assets/images/line.png"),
     color: "#22c55e",
+    route: "/line-query",
   },
   {
     title: "圖片辨識",
@@ -119,7 +121,11 @@ export default function HomeScreen() {
             style={styles.logo}
             resizeMode="contain"
           />
-          <TouchableOpacity style={styles.profileButton} activeOpacity={0.75}>
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => router.push("/(tabs)/profile")}
+            activeOpacity={0.75}
+          >
             <Ionicons name="person-outline" size={34} color="#0d0d0d" />
           </TouchableOpacity>
         </View>
@@ -132,7 +138,12 @@ export default function HomeScreen() {
         <Text style={styles.sectionTitle}>快速檢測</Text>
         <View style={styles.quickGrid}>
           {quickActions.map((item) => (
-            <TouchableOpacity key={item.title} style={styles.quickCard} activeOpacity={0.82}>
+            <TouchableOpacity
+              key={item.title}
+              style={styles.quickCard}
+              onPress={() => item.route && router.push(item.route as never)}
+              activeOpacity={0.82}
+            >
               <View style={[styles.quickIconCircle, { backgroundColor: `${item.color}1f` }]}>
                 {item.image ? (
                   <Image source={item.image} style={styles.quickImageIcon} resizeMode="contain" />
@@ -213,7 +224,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 15,
     paddingTop: 10,
-    paddingBottom: 70,
+    paddingBottom: 54,
   },
   header: {
     height: 68,
