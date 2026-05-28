@@ -613,10 +613,25 @@ const buildArticleSummary = (title: string, scamType: string, category: Category
   return `${topic}，整理${scamType}相關案例與注意事項。`;
 };
 
+const isFraudRelatedArticle = (article: Article) => {
+  const text = article.scamType === "一般防詐"
+    ? article.title
+    : `${article.title} ${article.summary} ${article.scamType}`;
+  const unrelatedKeywords = /透明晶質獎|推廣講習|績優|表揚|頒獎|活動成果|徵才|招募志工|交通安全|治安會報/;
+  const coreFraudKeywords =
+    /詐騙|詐欺|詐團|反詐|防詐|165|車手|人頭帳戶|洗錢|假檢警|假冒|釣魚|盜用|冒用|解除分期|監管帳戶|高報酬|保證獲利|投資詐騙|網購詐騙|交友詐騙|貸款詐騙|假客服|假投資|假貸款|假中獎/;
+  const scamMethodKeywords =
+    /LINE|客服|ATM|賣貨便|報稅|自然人憑證|簡訊|短網址|信用卡|個資|匯款|轉帳|帳戶|提款卡|存摺|網購|包裹|投資|股票|虛擬貨幣|交易平台|群組|貸款|借款|中獎|交友|檢警|法院|地檢署|公務機關/;
+
+  if (unrelatedKeywords.test(article.title)) {
+    return false;
+  }
+
+  return coreFraudKeywords.test(text) || (article.scamType !== "一般防詐" && scamMethodKeywords.test(text));
+};
+
 const parseArticleList = (html: string): Article[] => {
   const matches = [...html.matchAll(/<a[^>]+href="([^"]*\/ch\/app\/news\/view[^"]+)"[^>]*>([\s\S]*?)<\/a>/g)];
-  const antiFraudKeywords =
-    /詐|騙|165|假|匯款|轉帳|投資|客服|LINE|ATM|個資|釣魚|賣貨便|報稅|人頭帳戶|帳戶|洗錢|冒用|盜用|網購|簡訊|連結|中獎|貸款|交友|解除分期|實名認證|自然人憑證|高報酬|群組|通訊軟體|名人|保證獲利/;
   const seenUrls = new Set<string>();
 
   return matches
@@ -643,9 +658,7 @@ const parseArticleList = (html: string): Article[] => {
       };
     })
     .filter((article) => {
-      const searchableText = `${article.title} ${article.summary} ${article.scamType}`;
-
-      if (!article.title || seenUrls.has(article.url) || !antiFraudKeywords.test(searchableText)) {
+      if (!article.title || seenUrls.has(article.url) || !isFraudRelatedArticle(article)) {
         return false;
       }
 
