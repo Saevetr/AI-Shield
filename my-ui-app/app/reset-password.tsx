@@ -106,13 +106,8 @@ export default function ResetPasswordScreen() {
 
         <View style={styles.logoContainer}>
           <Image
-            source={require("@/assets/images/logo_bg.png")}
-            style={[styles.logoBg, styles.logoTight]}
-            resizeMode="contain"
-          />
-          <Image
-            source={require("@/assets/images/logo.png")}
-            style={[styles.logo, styles.logoTight]}
+            source={require("@/assets/images/auth-logo.png")}
+            style={styles.logo}
             resizeMode="contain"
           />
         </View>
@@ -227,8 +222,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 28,
-    paddingTop: 18,
-    backgroundColor: "#f8fbff",
+    paddingTop: 42,
+    backgroundColor: "#eef5ff",
     justifyContent: "flex-start",
     overflow: "hidden",
     ...(Platform.OS === "web"
@@ -242,23 +237,12 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 6,
-  },
-  logoBg: {
-    position: "absolute",
-    width: 230,
-    height: 140,
-    opacity: 0.26,
-    zIndex: 1,
+    marginTop: 18,
+    marginBottom: 18,
   },
   logo: {
-    width: 230,
-    height: 185,
-    zIndex: 2,
-  },
-  logoTight: {
-    marginTop: 0,
-    marginBottom: 0,
+    width: 250,
+    height: 160,
   },
   card: {
     borderRadius: 18,
@@ -271,7 +255,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 4,
     zIndex: 2,
-    marginTop: -14,
+    marginTop: 0,
   },
   title: {
     color: "#1f2937",

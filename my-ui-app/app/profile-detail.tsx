@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
@@ -14,6 +14,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
+import { getSavedProfile, saveProfile } from "@/utils/profile";
 
 const monthNames = [
   "January",
@@ -60,6 +62,22 @@ export default function ProfileDetailScreen() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showYearPicker, setShowYearPicker] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(new Date(2021, 8, 1));
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  useEffect(() => {
+    const loadSavedProfile = async () => {
+      const savedProfile = await getSavedProfile();
+
+      setName(savedProfile.name);
+      setPhone(savedProfile.phone);
+      setEmail(savedProfile.email);
+      setBirthday(savedProfile.birthday);
+      setGender(savedProfile.gender);
+      setAvatarUri(savedProfile.avatarUri);
+    };
+
+    void loadSavedProfile();
+  }, []);
 
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -137,6 +155,26 @@ export default function ProfileDetailScreen() {
 
     if (!result.canceled) {
       setAvatarUri(result.assets[0].uri);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    setIsSavingProfile(true);
+
+    try {
+      await saveProfile({
+        avatarUri,
+        birthday,
+        email,
+        gender,
+        name,
+        phone,
+      });
+      Alert.alert("儲存成功", "個人檔案已更新");
+    } catch {
+      Alert.alert("儲存失敗", "目前無法儲存個人檔案，請稍後再試");
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
@@ -245,7 +283,16 @@ export default function ProfileDetailScreen() {
           <Ionicons name="chevron-back" size={34} color="#0d0d0d" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>個人檔案</Text>
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity
+          style={[styles.saveButton, isSavingProfile && styles.saveButtonDisabled]}
+          onPress={handleSaveProfile}
+          disabled={isSavingProfile}
+          activeOpacity={0.76}
+        >
+          <Text style={[styles.saveButtonText, isSavingProfile && styles.saveButtonTextDisabled]}>
+            {isSavingProfile ? "儲存中" : "儲存"}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -268,11 +315,11 @@ export default function ProfileDetailScreen() {
             </View>
           </TouchableOpacity>
 
-          <Text style={styles.name}>麥片AI Shield</Text>
-          <Text style={styles.email}>maipian.aishield@gmail.com</Text>
+          <Text style={styles.name}>{name}</Text>
+          <Text style={styles.email}>{email}</Text>
           <View style={styles.editHint}>
             <Ionicons name="information-circle-outline" size={14} color="#397bf2" />
-            <Text style={styles.editHintText}>點選欄位即可修改個人資料</Text>
+            <Text style={styles.editHintText}>修改後需按右上儲存才會套用</Text>
           </View>
         </View>
 
@@ -816,6 +863,26 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 44,
+  },
+  saveButton: {
+    minWidth: 56,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#e8f1ff",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  saveButtonDisabled: {
+    backgroundColor: "#eef2f7",
+  },
+  saveButtonText: {
+    color: "#397bf2",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  saveButtonTextDisabled: {
+    color: "#94a3b8",
   },
   profileCard: {
     borderRadius: 18,

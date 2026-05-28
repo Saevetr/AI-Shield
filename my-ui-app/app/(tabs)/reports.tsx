@@ -26,6 +26,24 @@ type ReportItem = {
   date: string;
 };
 
+const formatReportTarget = (report: ReportItem) => {
+  if (report.type !== "電話") {
+    return report.target;
+  }
+
+  const compactTarget = report.target.replace(/[\s()-]/g, "");
+
+  if (compactTarget.startsWith("+8869")) {
+    return `0${compactTarget.slice(4)}`.replace(/(\d{4})(\d{3})(\d{3})/, "$1 $2 $3");
+  }
+
+  if (compactTarget.startsWith("8869")) {
+    return `0${compactTarget.slice(3)}`.replace(/(\d{4})(\d{3})(\d{3})/, "$1 $2 $3");
+  }
+
+  return report.target;
+};
+
 const reports: ReportItem[] = [
   {
     id: "r1",
@@ -196,7 +214,7 @@ export default function ReportsScreen() {
                       <Ionicons name={typeIcon} size={22} color="#397bf2" />
                     </View>
                     <View style={styles.reportMain}>
-                      <Text style={styles.reportTarget}>{report.target}</Text>
+                      <Text style={styles.reportTarget}>{formatReportTarget(report)}</Text>
                       <Text style={styles.reportDate}>{report.date}</Text>
                     </View>
                     <View style={[styles.statusPill, { backgroundColor: statusStyle.backgroundColor }]}>

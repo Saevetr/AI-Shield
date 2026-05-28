@@ -13,6 +13,7 @@ export default function RootLayout() {
         <Stack.Screen name="line-query" />
         <Stack.Screen name="blacklist" />
         <Stack.Screen name="profile-detail" />
+        <Stack.Screen name="premium-unlock" />
         <Stack.Screen name="(tabs)" />
       </Stack>
 
