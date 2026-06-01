@@ -7,7 +7,7 @@ import { HapticTab } from "@/components/haptic-tab";
 
 const tabConfig = {
   reports: { label: "通報紀錄", icon: "newspaper-outline" },
-  explore: { label: "防詐知識", icon: "book-outline" },
+  explore: { label: "防詐情報站", icon: "book-outline" },
   index: { label: "首頁", icon: "home-outline" },
   chat: { label: "AI聊天室", icon: "chatbubbles-outline" },
   profile: { label: "我的資料", icon: "person-outline" },

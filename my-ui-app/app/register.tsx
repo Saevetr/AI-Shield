@@ -161,13 +161,7 @@ export default function Register() {
 
       <View style={styles.logoContainer}>
         <Image
-          source={require("@/assets/images/logo_bg.png")}
-          style={styles.logoBg}
-          resizeMode="contain"
-        />
-
-        <Image
-          source={require("@/assets/images/logo.png")}
+          source={require("@/assets/images/auth-logo.png")}
           style={styles.logo}
           resizeMode="contain"
         />
@@ -305,26 +299,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 28,
-    paddingTop: 38,
-    backgroundColor: "#f8fbff",
+    paddingTop: 48,
+    backgroundColor: "#eef5ff",
   },
   logoContainer: {
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 10,
+    marginTop: 18,
     marginBottom: 10,
   },
-  logoBg: {
-    position: "absolute",
-    width: 230,
-    height: 140,
-    opacity: 0.26,
-    zIndex: 1,
-  },
   logo: {
-    width: 230,
-    height: 185,
-    zIndex: 2,
+    width: 250,
+    height: 160,
   },
   hexagonBg: {
     position: "absolute",

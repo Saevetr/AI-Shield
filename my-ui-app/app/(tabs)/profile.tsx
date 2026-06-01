@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   Alert,
+  Image,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -11,6 +13,7 @@ import {
 } from "react-native";
 
 import { logout } from "@/utils/auth";
+import { DEFAULT_PROFILE, getSavedProfile } from "@/utils/profile";
 
 type MenuRow = {
   badge?: string;
@@ -26,6 +29,18 @@ const showComingSoon = (title: string) => {
 };
 
 export default function ProfileScreen() {
+  const [profile, setProfile] = useState(DEFAULT_PROFILE);
+
+  useFocusEffect(
+    useCallback(() => {
+      const loadSavedAvatar = async () => {
+        setProfile(await getSavedProfile());
+      };
+
+      void loadSavedAvatar();
+    }, [])
+  );
+
   const handleLogout = async () => {
     await logout();
     router.replace("/login");
@@ -55,7 +70,7 @@ export default function ProfileScreen() {
       description: "解鎖更多防詐工具",
       icon: "card-outline",
       label: "購買進階功能",
-      onPress: () => showComingSoon("購買進階功能"),
+      onPress: () => router.push("/premium-unlock" as never),
     },
     {
       description: "maipian.aishield@gmail.com",
@@ -77,7 +92,7 @@ export default function ProfileScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => router.replace("/(tabs)")}
           activeOpacity={0.75}
         >
           <Ionicons name="chevron-back" size={34} color="#0d0d0d" />
@@ -93,13 +108,19 @@ export default function ProfileScreen() {
       >
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
-            <View style={styles.avatarHead} />
-            <View style={styles.avatarBody} />
+            {profile.avatarUri ? (
+              <Image source={{ uri: profile.avatarUri }} style={styles.avatarImage} />
+            ) : (
+              <>
+                <View style={styles.avatarHead} />
+                <View style={styles.avatarBody} />
+              </>
+            )}
           </View>
 
           <View style={styles.profileInfo}>
-            <Text style={styles.name}>麥片AI Shield</Text>
-            <Text style={styles.phone}>0912 345 678</Text>
+            <Text style={styles.name}>{profile.name}</Text>
+            <Text style={styles.phone}>{profile.phone}</Text>
             <View style={styles.statusPill}>
               <Ionicons name="shield-checkmark" size={14} color="#397bf2" />
               <Text style={styles.statusText}>帳號保護中</Text>
@@ -240,6 +261,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     alignItems: "center",
     marginRight: 16,
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%",
   },
   avatarHead: {
     width: 27,

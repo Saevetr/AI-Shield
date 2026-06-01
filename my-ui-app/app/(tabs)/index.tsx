@@ -11,6 +11,8 @@ import {
   View,
 } from "react-native";
 
+import { getSavedProfile } from "@/utils/profile";
+
 const quickActions = [
   {
     title: "電話查詢",
@@ -38,6 +40,7 @@ const quickActions = [
     subtitle: "上傳圖片分析",
     icon: "camera",
     color: "#72a7ff",
+    route: "/(tabs)/chat",
   },
 ];
 
@@ -90,6 +93,7 @@ export default function HomeScreen() {
   const [policeAntiFraudImage, setPoliceAntiFraudImage] = useState(() =>
     getRandomAntiFraudImage()
   );
+  const [avatarUri, setAvatarUri] = useState("");
 
   useEffect(() => {
     policeAntiFraudImages.forEach((image) => {
@@ -99,6 +103,12 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      const loadSavedProfile = async () => {
+        const savedProfile = await getSavedProfile();
+        setAvatarUri(savedProfile.avatarUri);
+      };
+
+      void loadSavedProfile();
       setPoliceAntiFraudImage((currentImage) => getRandomAntiFraudImage(currentImage));
 
       const imageTimer = setInterval(() => {
@@ -128,7 +138,11 @@ export default function HomeScreen() {
             onPress={() => router.push("/(tabs)/profile")}
             activeOpacity={0.75}
           >
-            <Ionicons name="person-outline" size={34} color="#0d0d0d" />
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.profileAvatarImage} />
+            ) : (
+              <Ionicons name="person-outline" size={34} color="#0d0d0d" />
+            )}
           </TouchableOpacity>
         </View>
 
@@ -251,6 +265,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  profileAvatarImage: {
+    width: "100%",
+    height: "100%",
   },
   heroCard: {
     minHeight: 70,

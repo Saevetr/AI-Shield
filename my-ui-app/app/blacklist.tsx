@@ -6,12 +6,16 @@ import {
   Alert,
   Image,
   Modal,
+  Keyboard,
+  Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 
@@ -71,6 +75,11 @@ const formatDate = (createdAt?: string) => {
 
 export default function BlacklistScreen() {
   const [activeTab, setActiveTab] = useState<FilterTab>("全部");
+  const [blacklistItems, setBlacklistItems] = useState<BlacklistItem[]>(initialBlacklistItems);
+  const [newItemNote, setNewItemNote] = useState("");
+  const [newItemType, setNewItemType] = useState<BlacklistType>("電話");
+  const [newItemValue, setNewItemValue] = useState("");
+  const [showAddModal, setShowAddModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [items, setItems] = useState<BlacklistItem[]>([]);
   const [loading, setLoading] = useState(false);
