@@ -5,14 +5,12 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Modal,
   Keyboard,
   Modal,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
@@ -75,11 +73,6 @@ const formatDate = (createdAt?: string) => {
 
 export default function BlacklistScreen() {
   const [activeTab, setActiveTab] = useState<FilterTab>("全部");
-  const [blacklistItems, setBlacklistItems] = useState<BlacklistItem[]>(initialBlacklistItems);
-  const [newItemNote, setNewItemNote] = useState("");
-  const [newItemType, setNewItemType] = useState<BlacklistType>("電話");
-  const [newItemValue, setNewItemValue] = useState("");
-  const [showAddModal, setShowAddModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [items, setItems] = useState<BlacklistItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -331,79 +324,86 @@ export default function BlacklistScreen() {
           animationType="fade"
           onRequestClose={() => setModalVisible(false)}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>新增黑名單</Text>
-              <Text style={styles.modalSubtitle}>
-                選擇類型後輸入電話或 LINE ID，資料會寫入 MySQL。
-              </Text>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback>
+                <View style={styles.modalCard}>
+                  <Text style={styles.modalTitle}>新增黑名單</Text>
+                  <Text style={styles.modalSubtitle}>
+                    選擇類型後輸入電話或 LINE ID，資料會寫入 MySQL。
+                  </Text>
 
-              <View style={styles.typeSwitch}>
-                {(["電話", "LINE ID"] as BlacklistType[]).map((type) => {
-                  const isActive = newType === type;
+                  <View style={styles.typeSwitch}>
+                    {(["電話", "LINE ID"] as BlacklistType[]).map((type) => {
+                      const isActive = newType === type;
 
-                  return (
+                      return (
+                        <TouchableOpacity
+                          key={type}
+                          style={[
+                            styles.typeButton,
+                            isActive && styles.typeButtonActive,
+                          ]}
+                          onPress={() => setNewType(type)}
+                          activeOpacity={0.8}
+                        >
+                          <Text
+                            style={[
+                              styles.typeButtonText,
+                              isActive && styles.typeButtonTextActive,
+                            ]}
+                          >
+                            {type}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <TextInput
+                    value={newValue}
+                    onChangeText={setNewValue}
+                    placeholder={newType === "電話" ? "例如：0912345678" : "例如：@fake-invest"}
+                    placeholderTextColor="#9aacc8"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={styles.modalInput}
+                  />
+
+                  <TextInput
+                    value={newNote}
+                    onChangeText={setNewNote}
+                    placeholder="備註，可留空"
+                    placeholderTextColor="#9aacc8"
+                    style={[styles.modalInput, styles.noteInput]}
+                    multiline
+                  />
+
+                  <View style={styles.modalActions}>
                     <TouchableOpacity
-                      key={type}
-                      style={[
-                        styles.typeButton,
-                        isActive && styles.typeButtonActive,
-                      ]}
-                      onPress={() => setNewType(type)}
+                      style={styles.cancelButton}
+                      onPress={() => setModalVisible(false)}
+                      disabled={saving}
+                      activeOpacity={0.8}
                     >
-                      <Text
-                        style={[
-                          styles.typeButtonText,
-                          isActive && styles.typeButtonTextActive,
-                        ]}
-                      >
-                        {type}
+                      <Text style={styles.cancelButtonText}>取消</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                      onPress={handleAdd}
+                      disabled={saving}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.saveButtonText}>
+                        {saving ? "新增中..." : "新增"}
                       </Text>
                     </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <TextInput
-                value={newValue}
-                onChangeText={setNewValue}
-                placeholder={newType === "電話" ? "例如：0912345678" : "例如：@fake-invest"}
-                placeholderTextColor="#9aacc8"
-                autoCapitalize="none"
-                autoCorrect={false}
-                style={styles.modalInput}
-              />
-
-              <TextInput
-                value={newNote}
-                onChangeText={setNewNote}
-                placeholder="備註，可留空"
-                placeholderTextColor="#9aacc8"
-                style={[styles.modalInput, styles.noteInput]}
-                multiline
-              />
-
-              <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={() => setModalVisible(false)}
-                  disabled={saving}
-                >
-                  <Text style={styles.cancelButtonText}>取消</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-                  onPress={handleAdd}
-                  disabled={saving}
-                >
-                  <Text style={styles.saveButtonText}>
-                    {saving ? "新增中..." : "新增"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
             </View>
-          </View>
+          </TouchableWithoutFeedback>
         </Modal>
       </View>
     </SafeAreaView>
