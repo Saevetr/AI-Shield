@@ -24,6 +24,7 @@ const quickActions = [
     subtitle: "分析可疑訊息",
     icon: "chatbubble-ellipses",
     color: "#72a7ff",
+    route: "/message-query",
   },
   {
     title: "LINE ID 查詢",
@@ -121,6 +122,7 @@ export default function HomeScreen() {
             style={styles.logo}
             resizeMode="contain"
           />
+
           <TouchableOpacity
             style={styles.profileButton}
             onPress={() => router.push("/(tabs)/profile")}
@@ -136,6 +138,7 @@ export default function HomeScreen() {
         </View>
 
         <Text style={styles.sectionTitle}>快速檢測</Text>
+
         <View style={styles.quickGrid}>
           {quickActions.map((item) => (
             <TouchableOpacity
@@ -151,6 +154,7 @@ export default function HomeScreen() {
                   <Ionicons name={item.icon as any} size={27} color={item.color} />
                 )}
               </View>
+
               <Text style={styles.quickTitle}>{item.title}</Text>
               <Text style={styles.quickSubtitle}>{item.subtitle}</Text>
             </TouchableOpacity>
@@ -168,9 +172,11 @@ export default function HomeScreen() {
               <View style={[styles.rankBadge, { backgroundColor: item.color }]}>
                 <Text style={styles.rankText}>{item.rank}</Text>
               </View>
+
               <View style={[styles.scamIconCircle, { backgroundColor: `${item.color}22` }]}>
                 <Ionicons name={item.icon as any} size={22} color={item.color} />
               </View>
+
               <Text style={styles.scamName}>{item.title}</Text>
               <Text style={styles.scamCount}>{item.count}</Text>
             </View>
@@ -182,6 +188,7 @@ export default function HomeScreen() {
             <Text style={styles.riskTitle}>近期高風險號碼</Text>
             <Text style={styles.riskHint}>165 高風險通報整理</Text>
           </View>
+
           <View style={styles.emptyRiskState}>
             <Ionicons name="shield-checkmark-outline" size={32} color="#8aa4c5" />
             <Text style={styles.emptyRiskText}>尚無新的高風險號碼</Text>
@@ -194,6 +201,7 @@ export default function HomeScreen() {
               <Text style={styles.advocacyTitle}>警政署防詐宣導</Text>
               <Text style={styles.advocacySubtitle}>取自 165 打詐儀錶板下載區</Text>
             </View>
+
             <View style={styles.sourceBadge}>
               <Text style={styles.sourceBadgeText}>165</Text>
             </View>
