@@ -116,6 +116,220 @@ app.get("/api/users", async (req, res) => {
   }
 });
 
+app.get("/api/check-phone", async (req, res) => {
+  const phone = String(req.query.phone || "").replace(/\D/g, "");
+
+  if (phone.length < 6) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid phone number",
+    });
+  }
+
+  try {
+    const searchTables = {
+      fraud_database: [
+        "phone",
+        "phone_number",
+        "telephone",
+        "mobile",
+        "number",
+        "contact",
+        "account",
+        "content",
+      ],
+      blacklist: [
+        "phone",
+        "phone_number",
+        "telephone",
+        "mobile",
+        "number",
+        "keyword",
+        "reason",
+      ],
+      line_database: [
+        "phone",
+        "phone_number",
+        "telephone",
+        "mobile",
+        "number",
+        "line_id",
+        "account",
+        "content",
+      ],
+    };
+
+    const matches = [];
+
+    for (const [tableName, possibleColumns] of Object.entries(searchTables)) {
+      const [columns] = await pool.query(
+        `
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+        `,
+        [tableName]
+      );
+
+      const existingColumns = columns.map((item) => item.COLUMN_NAME);
+      const searchableColumns = possibleColumns.filter((column) =>
+        existingColumns.includes(column)
+      );
+
+      if (searchableColumns.length === 0) {
+        continue;
+      }
+
+      const whereSql = searchableColumns
+        .map(
+          (column) =>
+            `REPLACE(REPLACE(REPLACE(REPLACE(CAST(\`${column}\` AS CHAR), '-', ''), ' ', ''), '(', ''), ')', '') LIKE ?`
+        )
+        .join(" OR ");
+
+      const params = searchableColumns.map(() => `%${phone}%`);
+
+      const [rows] = await pool.query(
+        `
+        SELECT *, ? AS source_table
+        FROM \`${tableName}\`
+        WHERE ${whereSql}
+        LIMIT 10
+        `,
+        [tableName, ...params]
+      );
+
+      matches.push(...rows);
+    }
+
+    const isScam = matches.length > 0;
+
+    res.json({
+      success: true,
+      phone,
+      isScam,
+      carrier: "未知電信",
+      score: isScam ? 88 : 15,
+      message: isScam
+        ? "注意！此號碼有疑似詐騙紀錄。"
+        : "安全！目前資料庫中無此號碼紀錄。",
+      data: matches,
+      detail: {
+        isScam,
+        score: isScam ? 88 : 15,
+        carrier: "未知電信",
+        message: isScam
+          ? "注意！此號碼有疑似詐騙紀錄。"
+          : "安全！目前資料庫中無此號碼紀錄。",
+      },
+    });
+  } catch (error) {
+    console.error("Failed to check phone:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to check phone",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/api/check-line", async (req, res) => {
+  const lineId = String(
+    req.query.lineId || req.query.line || req.query.id || req.query.account || ""
+  ).trim();
+
+  if (lineId.length < 3) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid LINE ID",
+    });
+  }
+
+  try {
+    const searchTables = {
+      line_database: ["line_id", "lineId", "line_account", "account", "id", "keyword", "content", "name"],
+      blacklist: ["line_id", "lineId", "line_account", "account", "keyword", "reason"],
+      fraud_database: ["line_id", "lineId", "line_account", "account", "content", "keyword"],
+    };
+
+    const matches = [];
+
+    for (const [tableName, possibleColumns] of Object.entries(searchTables)) {
+      const [columns] = await pool.query(
+        `
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+        `,
+        [tableName]
+      );
+
+      const existingColumns = columns.map((item) => item.COLUMN_NAME);
+      const searchableColumns = possibleColumns.filter((column) =>
+        existingColumns.includes(column)
+      );
+
+      if (searchableColumns.length === 0) continue;
+
+      const whereSql = searchableColumns
+        .map((column) => `CAST(\`${column}\` AS CHAR) LIKE ?`)
+        .join(" OR ");
+
+      const params = searchableColumns.map(() => `%${lineId}%`);
+
+      const [rows] = await pool.query(
+        `
+        SELECT *, ? AS source_table
+        FROM \`${tableName}\`
+        WHERE ${whereSql}
+        LIMIT 10
+        `,
+        [tableName, ...params]
+      );
+
+      matches.push(...rows);
+    }
+
+    const isScam = matches.length > 0;
+
+    res.json({
+      success: true,
+      lineId,
+      isScam,
+      level: isScam ? "high" : "low",
+      score: isScam ? 88 : 15,
+      status: isScam ? "危險帳號" : "safe",
+      message: isScam
+        ? "注意！此 LINE ID 有疑似詐騙紀錄。"
+        : "安全！目前資料庫中無此 LINE ID 紀錄。",
+      reason: isScam ? "資料庫中找到相關紀錄。" : "",
+      data: matches,
+      detail: {
+        lineId,
+        isScam,
+        level: isScam ? "high" : "low",
+        score: isScam ? 88 : 15,
+        status: isScam ? "危險帳號" : "safe",
+        message: isScam
+          ? "注意！此 LINE ID 有疑似詐騙紀錄。"
+          : "安全！目前資料庫中無此 LINE ID 紀錄。",
+        reason: isScam ? "資料庫中找到相關紀錄。" : "",
+      },
+    });
+  } catch (error) {
+    console.error("Failed to check LINE ID:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to check LINE ID",
+      error: error.message,
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
