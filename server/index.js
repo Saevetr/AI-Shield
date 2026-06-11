@@ -330,6 +330,161 @@ app.get("/api/check-line", async (req, res) => {
   }
 });
 
+async function analyzeMessageText(text) {
+  const messageText = String(text || "").trim();
+
+  if (messageText.length < 2) {
+    return {
+      success: false,
+      statusCode: 400,
+      message: "Invalid message text",
+    };
+  }
+
+  const [keywords] = await pool.query(
+    "SELECT id, keyword, level, score, reason FROM message_keywords"
+  );
+
+  const matchedKeywords = keywords.filter((item) => {
+    const keyword = String(item.keyword || "").trim();
+    return keyword && messageText.includes(keyword);
+  });
+
+  let level = "low";
+  let score = 15;
+
+  if (matchedKeywords.length > 0) {
+    const maxScore = Math.max(
+      ...matchedKeywords.map((item) => Number(item.score || 0))
+    );
+
+    score = maxScore || 80;
+
+    if (score >= 80) {
+      level = "high";
+    } else if (score >= 50) {
+      level = "medium";
+    } else {
+      level = "low";
+    }
+  }
+
+  const isScam = matchedKeywords.length > 0 && score >= 50;
+
+  return {
+    success: true,
+    text: messageText,
+    isScam,
+    level,
+    score,
+    message: isScam
+      ? "此訊息包含疑似詐騙關鍵字，請提高警覺。"
+      : "目前未發現明顯詐騙關鍵字。",
+    matchedKeywords,
+    data: {
+      isScam,
+      level,
+      score,
+      message: isScam
+        ? "此訊息包含疑似詐騙關鍵字，請提高警覺。"
+        : "目前未發現明顯詐騙關鍵字。",
+      matchedKeywords,
+    },
+    detail: {
+      isScam,
+      level,
+      score,
+      message: isScam
+        ? "此訊息包含疑似詐騙關鍵字，請提高警覺。"
+        : "目前未發現明顯詐騙關鍵字。",
+      reason:
+        matchedKeywords.length > 0
+          ? matchedKeywords.map((item) => item.reason || item.keyword).join("、")
+          : "",
+    },
+  };
+}
+
+app.get("/api/analyze-message", async (req, res) => {
+  try {
+    const result = await analyzeMessageText(req.query.text || req.query.message);
+
+    if (result.success === false) {
+      return res.status(result.statusCode || 400).json(result);
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error("Failed to analyze message:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to analyze message",
+      error: error.message,
+    });
+  }
+});
+
+app.post("/api/analyze-message", async (req, res) => {
+  try {
+    const result = await analyzeMessageText(req.body.text || req.body.message);
+
+    if (result.success === false) {
+      return res.status(result.statusCode || 400).json(result);
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error("Failed to analyze message:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to analyze message",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/api/check-message", async (req, res) => {
+  try {
+    const result = await analyzeMessageText(req.query.text || req.query.message);
+
+    if (result.success === false) {
+      return res.status(result.statusCode || 400).json(result);
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error("Failed to check message:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to check message",
+      error: error.message,
+    });
+  }
+});
+
+app.post("/api/check-message", async (req, res) => {
+  try {
+    const result = await analyzeMessageText(req.body.text || req.body.message);
+
+    if (result.success === false) {
+      return res.status(result.statusCode || 400).json(result);
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error("Failed to check message:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to check message",
+      error: error.message,
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
