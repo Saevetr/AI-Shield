@@ -9,7 +9,13 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "允許 AI Shield 使用語音辨識功能。",
+        "NSMicrophoneUsageDescription": "允許 AI Shield 使用麥克風進行語音輸入。",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.fishball0.x0.myuiapp"
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +25,11 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "com.fishball0.x0.myuiapp"
     },
     "web": {
       "output": "static",
@@ -38,11 +48,34 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "允許 AI Shield 存取相簿，用來選擇個人頭像。"
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "允許 AI Shield 使用麥克風進行語音輸入。",
+          "speechRecognitionPermission": "允許 AI Shield 使用語音辨識功能。",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6779d2a2-02c0-4231-b74f-a4d5340f6fa1"
+      }
     }
   }
 }
