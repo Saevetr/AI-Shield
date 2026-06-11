@@ -46,6 +46,76 @@ app.get("/api/anti-fraud-knowledge", async (req, res) => {
   }
 });
 
+app.get("/api/blacklist", async (req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT * FROM blacklist");
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error("Failed to query blacklist:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to query blacklist",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/api/fraud-database", async (req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT * FROM fraud_database");
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error("Failed to query fraud_database:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to query fraud database",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/api/line-database", async (req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT * FROM line_database");
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error("Failed to query line_database:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to query line database",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/api/message-keywords", async (req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT * FROM message_keywords");
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error("Failed to query message_keywords:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to query message keywords",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/api/users", async (req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT * FROM user");
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error("Failed to query user:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to query users",
+      error: error.message,
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
