@@ -645,6 +645,129 @@ app.get("/api/home/summary", async (req, res) => {
   }
 });
 
+app.get("/api/home/recent-risk-phones", async (req, res) => {
+  try {
+    const possibleTables = ["blacklist", "fraud_database"];
+    const possiblePhoneColumns = [
+      "phone",
+      "phone_number",
+      "telephone",
+      "mobile",
+      "number",
+      "contact",
+      "account",
+    ];
+    const possibleReasonColumns = [
+      "reason",
+      "description",
+      "content",
+      "type",
+      "category",
+      "fraud_type",
+      "note",
+    ];
+    const possibleDateColumns = [
+      "created_at",
+      "updated_at",
+      "report_time",
+      "reported_at",
+      "date",
+    ];
+
+    const results = [];
+
+    for (const tableName of possibleTables) {
+      const [columns] = await pool.query(
+        `
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+        `,
+        [tableName]
+      );
+
+      if (columns.length === 0) {
+        continue;
+      }
+
+      const existingColumns = columns.map((item) => item.COLUMN_NAME);
+
+      const phoneColumn = possiblePhoneColumns.find((column) =>
+        existingColumns.includes(column)
+      );
+
+      if (!phoneColumn) {
+        continue;
+      }
+
+      const reasonColumn = possibleReasonColumns.find((column) =>
+        existingColumns.includes(column)
+      );
+
+      const dateColumn = possibleDateColumns.find((column) =>
+        existingColumns.includes(column)
+      );
+
+      const reasonSelect = reasonColumn
+        ? `\`${reasonColumn}\` AS reason`
+        : `'疑似高風險號碼' AS reason`;
+
+      const dateSelect = dateColumn
+        ? `\`${dateColumn}\` AS created_at`
+        : `NULL AS created_at`;
+
+      const orderSql = dateColumn
+        ? `ORDER BY \`${dateColumn}\` DESC`
+        : "";
+
+      const [rows] = await pool.query(
+        `
+        SELECT
+          \`${phoneColumn}\` AS phone,
+          ${reasonSelect},
+          ${dateSelect},
+          ? AS source_table
+        FROM \`${tableName}\`
+        WHERE \`${phoneColumn}\` IS NOT NULL
+          AND \`${phoneColumn}\` != ''
+        ${orderSql}
+        LIMIT 5
+        `,
+        [tableName]
+      );
+
+      results.push(...rows);
+    }
+
+    const data = results.slice(0, 5).map((item, index) => ({
+      id: index + 1,
+      phone: item.phone,
+      reason: item.reason || "疑似高風險號碼",
+      source: item.source_table,
+      createdAt: item.created_at,
+      level: "high",
+    }));
+
+    res.json({
+      success: true,
+      data,
+      message:
+        data.length > 0
+          ? "Recent high-risk phones loaded"
+          : "No recent high-risk phones",
+    });
+  } catch (error) {
+    console.error("Failed to get recent risk phones:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to get recent risk phones",
+      error: error.message,
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
