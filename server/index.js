@@ -485,6 +485,108 @@ app.post("/api/check-message", async (req, res) => {
   }
 });
 
+app.get("/api/home/top-fraud-types", async (req, res) => {
+  try {
+    const defaultTopTypes = [
+      {
+        rank: 1,
+        name: "網路購物詐騙",
+        count: 128,
+        icon: "cart",
+      },
+      {
+        rank: 2,
+        name: "假投資詐騙",
+        count: 34,
+        icon: "trending-up",
+      },
+      {
+        rank: 3,
+        name: "假交友(投資詐財)詐騙",
+        count: 24,
+        icon: "heart",
+      },
+    ];
+
+    // 先檢查 fraud_database 有沒有可用欄位
+    const [columns] = await pool.query(
+      `
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'fraud_database'
+      `
+    );
+
+    const existingColumns = columns.map((item) => item.COLUMN_NAME);
+
+    const possibleTypeColumns = [
+      "fraud_type",
+      "type",
+      "category",
+      "fraud_category",
+      "case_type",
+      "scam_type",
+    ];
+
+    const typeColumn = possibleTypeColumns.find((column) =>
+      existingColumns.includes(column)
+    );
+
+    // 如果 fraud_database 沒有分類欄位，就先回傳預設 TOP 3
+    if (!typeColumn) {
+      return res.json({
+        success: true,
+        source: "default",
+        data: defaultTopTypes,
+      });
+    }
+
+    const [rows] = await pool.query(
+      `
+      SELECT \`${typeColumn}\` AS name, COUNT(*) AS count
+      FROM fraud_database
+      WHERE \`${typeColumn}\` IS NOT NULL
+        AND \`${typeColumn}\` != ''
+      GROUP BY \`${typeColumn}\`
+      ORDER BY count DESC
+      LIMIT 3
+      `
+    );
+
+    if (rows.length === 0) {
+      return res.json({
+        success: true,
+        source: "default",
+        data: defaultTopTypes,
+      });
+    }
+
+    const iconMap = ["cart", "trending-up", "heart"];
+
+    const data = rows.map((item, index) => ({
+      rank: index + 1,
+      name: item.name,
+      count: Number(item.count),
+      icon: iconMap[index] || "alert-circle",
+    }));
+
+    res.json({
+      success: true,
+      source: "database",
+      data,
+    });
+  } catch (error) {
+    console.error("Failed to get top fraud types:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to get top fraud types",
+      error: error.message,
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
