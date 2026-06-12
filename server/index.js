@@ -768,6 +768,92 @@ app.get("/api/home/recent-risk-phones", async (req, res) => {
   }
 });
 
+app.get("/api/home/latest-knowledge", async (req, res) => {
+  try {
+    const defaultKnowledge = [
+      {
+        id: 1,
+        title: "假投資詐騙提醒",
+        content: "看到保證獲利、穩賺不賠、高報酬低風險等話術，請提高警覺。",
+        category: "技巧",
+        source: "165 全民防騙網",
+        viewCount: 0,
+      },
+      {
+        id: 2,
+        title: "網路購物詐騙提醒",
+        content: "購物前請確認賣場評價，不要私下匯款或點擊不明付款連結。",
+        category: "手法",
+        source: "警政署",
+        viewCount: 0,
+      },
+      {
+        id: 3,
+        title: "LINE 陌生帳號提醒",
+        content: "陌生帳號要求加入投資群、購買點數或提供驗證碼時，請先查證。",
+        category: "技巧",
+        source: "AI Shield",
+        viewCount: 0,
+      },
+    ];
+
+    const [tables] = await pool.query(
+      `
+      SELECT TABLE_NAME
+      FROM INFORMATION_SCHEMA.TABLES
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'anti_fraud_knowledge'
+      `
+    );
+
+    if (tables.length === 0) {
+      return res.json({
+        success: true,
+        source: "default",
+        data: defaultKnowledge,
+      });
+    }
+
+    const [rows] = await pool.query(
+      `
+      SELECT
+        knowledge_id AS id,
+        title,
+        content,
+        category,
+        source,
+        view_count AS viewCount,
+        created_at AS createdAt
+      FROM anti_fraud_knowledge
+      ORDER BY created_at DESC
+      LIMIT 3
+      `
+    );
+
+    if (rows.length === 0) {
+      return res.json({
+        success: true,
+        source: "default",
+        data: defaultKnowledge,
+      });
+    }
+
+    res.json({
+      success: true,
+      source: "database",
+      data: rows,
+    });
+  } catch (error) {
+    console.error("Failed to get latest knowledge:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to get latest knowledge",
+      error: error.message,
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
