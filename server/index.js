@@ -920,6 +920,73 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
+app.post("/api/register", async (req, res) => {
+  const username = String(req.body.username || "").trim();
+  const email = String(req.body.email || "").trim().toLowerCase();
+  const password = String(req.body.password || "").trim();
+
+  if (!username || !email || !password) {
+    return res.status(400).json({
+      success: false,
+      message: "Username, email and password are required",
+    });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({
+      success: false,
+      message: "Password must be at least 6 characters",
+    });
+  }
+
+  try {
+    const [existingUsers] = await pool.query(
+      "SELECT user_id FROM `user` WHERE email = ? OR username = ? LIMIT 1",
+      [email, username]
+    );
+
+    if (existingUsers.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: "Email or username already exists",
+      });
+    }
+
+    const customerId = `CUST${Date.now()}`;
+
+    const [result] = await pool.query(
+      `
+      INSERT INTO \`user\`
+      (username, email, password_hash, membership_level, is_verified, status, customer_id)
+      VALUES (?, ?, ?, 'FREE', 1, 'ACTIVE', ?)
+      `,
+      [username, email, password, customerId]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Register successful",
+      data: {
+        user_id: result.insertId,
+        username,
+        email,
+        membership_level: "FREE",
+        is_verified: 1,
+        status: "ACTIVE",
+        customer_id: customerId,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to register:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to register",
+      error: error.message,
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
