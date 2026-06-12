@@ -854,6 +854,72 @@ app.get("/api/home/latest-knowledge", async (req, res) => {
   }
 });
 
+app.post("/api/login", async (req, res) => {
+  const account = String(req.body.account || req.body.email || req.body.username || "").trim();
+  const password = String(req.body.password || "").trim();
+
+  if (!account || !password) {
+    return res.status(400).json({
+      success: false,
+      message: "Account and password are required",
+    });
+  }
+
+  try {
+    const [rows] = await pool.query(
+      `
+      SELECT
+        user_id,
+        username,
+        email,
+        membership_level,
+        created_at,
+        is_verified,
+        status,
+        last_login,
+        customer_id
+      FROM \`user\`
+      WHERE (email = ? OR username = ?)
+        AND password_hash = ?
+        AND status = 'ACTIVE'
+      LIMIT 1
+      `,
+      [account, account, password]
+    );
+
+    if (rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid account or password",
+      });
+    }
+
+    const user = rows[0];
+
+    await pool.query(
+      "UPDATE `user` SET last_login = CURRENT_TIMESTAMP WHERE user_id = ?",
+      [user.user_id]
+    );
+
+    res.json({
+      success: true,
+      message: "Login successful",
+      data: {
+        ...user,
+        last_login: new Date(),
+      },
+    });
+  } catch (error) {
+    console.error("Failed to login:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to login",
+      error: error.message,
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
