@@ -587,6 +587,64 @@ app.get("/api/home/top-fraud-types", async (req, res) => {
   }
 });
 
+app.get("/api/home/summary", async (req, res) => {
+  try {
+    const getTableCount = async (tableName) => {
+      const [tables] = await pool.query(
+        `
+        SELECT TABLE_NAME
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+        `,
+        [tableName]
+      );
+
+      if (tables.length === 0) {
+        return 0;
+      }
+
+      const [rows] = await pool.query(
+        `SELECT COUNT(*) AS count FROM \`${tableName}\``
+      );
+
+      return Number(rows[0].count || 0);
+    };
+
+    const blacklistCount = await getTableCount("blacklist");
+    const fraudDatabaseCount = await getTableCount("fraud_database");
+    const reportCount = await getTableCount("report");
+    const reportFraudCount = await getTableCount("report_fraud");
+    const knowledgeCount = await getTableCount("anti_fraud_knowledge");
+    const keywordCount = await getTableCount("message_keywords");
+    const userCount = await getTableCount("user");
+
+    const totalReportCount = reportCount + reportFraudCount;
+    const highRiskCount = blacklistCount + fraudDatabaseCount;
+
+    res.json({
+      success: true,
+      data: {
+        reportCount: totalReportCount,
+        highRiskCount,
+        blacklistCount,
+        fraudDatabaseCount,
+        knowledgeCount,
+        keywordCount,
+        userCount,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to get home summary:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to get home summary",
+      error: error.message,
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
