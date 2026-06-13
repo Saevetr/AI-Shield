@@ -20,6 +20,7 @@ import {
 GoogleAuthProvider,
 sendPasswordResetEmail,
 signInWithCredential,
+  signInWithPopup,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/app/config/firebase";
@@ -110,6 +111,45 @@ try {
 
 };
 
+const handleGoogleLogin = async () => {
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({
+      prompt: "select_account",
+    });
+
+    const userCredential = await signInWithPopup(auth, provider);
+    const firebaseUser = userCredential.user;
+
+    const backendRes = await fetch("http://localhost:3000/api/google-login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: firebaseUser.email,
+        username: firebaseUser.displayName || firebaseUser.email?.split("@")[0],
+        googleId: firebaseUser.uid,
+      }),
+    });
+
+    const backendResult = await backendRes.json();
+
+    if (!backendRes.ok || backendResult.success !== true) {
+      throw new Error(backendResult.message || "Google login sync failed");
+    }
+
+    await setLogin(true);
+    router.replace("/(tabs)");
+  } catch (error) {
+    console.log("Google login error:", error);
+
+    const message =
+      error instanceof Error ? error.message : "Google login failed";
+
+    Alert.alert("Google login failed", message);
+  }
+};
 const openForgotPassword = () => {
 setResetEmail(email);
 setShowForgotModal(true);
@@ -253,8 +293,8 @@ resizeMode="contain"
     <View style={styles.socialRow}>
       <TouchableOpacity
         style={styles.socialButton}
-        onPress={() => promptAsync({ useProxy: true } as any)}
-        disabled={!request}
+        onPress={handleGoogleLogin}
+        disabled={false}
       >
         <Image
           source={require("@/assets/images/google.png")}
@@ -631,3 +671,5 @@ fontSize: 15,
 fontWeight: "700",
 },
 });
+
+

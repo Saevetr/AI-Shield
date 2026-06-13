@@ -987,6 +987,78 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
+app.post("/api/google-login", async (req, res) => {
+  const email = String(req.body.email || "").trim().toLowerCase();
+  const username = String(
+    req.body.username ||
+      req.body.displayName ||
+      req.body.name ||
+      email.split("@")[0] ||
+      ""
+  ).trim();
+  const googleId = String(req.body.googleId || req.body.uid || "").trim();
+
+  if (!email) {
+    return res.status(400).json({
+      success: false,
+      message: "Email is required",
+    });
+  }
+
+  try {
+    const [existingUsers] = await pool.query(
+      "SELECT user_id, username, email, membership_level, created_at, is_verified, status, last_login, customer_id FROM user WHERE email = ? LIMIT 1",
+      [email]
+    );
+
+    if (existingUsers.length > 0) {
+      const user = existingUsers[0];
+
+      await pool.query(
+        "UPDATE user SET last_login = CURRENT_TIMESTAMP, status = 'ACTIVE' WHERE user_id = ?",
+        [user.user_id]
+      );
+
+      return res.json({
+        success: true,
+        message: "Google login successful",
+        data: {
+          ...user,
+          last_login: new Date(),
+        },
+      });
+    }
+
+    const customerId = "GOOGLE" + Date.now();
+
+    const [result] = await pool.query(
+      "INSERT INTO user (username, email, password_hash, membership_level, is_verified, status, customer_id) VALUES (?, ?, ?, 'FREE', 1, 'ACTIVE', ?)",
+      [username || email.split("@")[0], email, googleId || "GOOGLE_LOGIN", customerId]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Google register and login successful",
+      data: {
+        user_id: result.insertId,
+        username: username || email.split("@")[0],
+        email,
+        membership_level: "FREE",
+        is_verified: 1,
+        status: "ACTIVE",
+        customer_id: customerId,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to login with Google:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to login with Google",
+      error: error.message,
+    });
+  }
+});
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
