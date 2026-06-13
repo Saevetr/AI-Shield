@@ -1059,8 +1059,141 @@ app.post("/api/google-login", async (req, res) => {
     });
   }
 });
+app.get("/api/line-login", (req, res) => {
+  const channelId = process.env.LINE_CHANNEL_ID;
+  const redirectUri = process.env.LINE_REDIRECT_URI;
+
+  if (!channelId || !redirectUri) {
+    return res.status(500).json({
+      success: false,
+      message: "LINE login settings are missing",
+    });
+  }
+
+  const state =
+    "line_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: channelId,
+    redirect_uri: redirectUri,
+    state,
+    scope: "profile openid",
+  });
+
+  res.redirect("https://access.line.me/oauth2/v2.1/authorize?" + params.toString());
+});
+
+app.get("/api/line-login/callback", async (req, res) => {
+  const code = String(req.query.code || "");
+  const error = String(req.query.error || "");
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8082";
+
+  const redirectToFrontend = (status, message) => {
+    const target = new URL("/line-callback", frontendUrl);
+    target.searchParams.set("status", status);
+
+    if (message) {
+      target.searchParams.set("message", message);
+    }
+
+    return target.toString();
+  };
+
+  if (error) {
+    return res.redirect(redirectToFrontend("failed", error));
+  }
+
+  if (!code) {
+    return res.redirect(redirectToFrontend("failed", "Missing LINE code"));
+  }
+
+  try {
+    const tokenParams = new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: process.env.LINE_REDIRECT_URI || "",
+      client_id: process.env.LINE_CHANNEL_ID || "",
+      client_secret: process.env.LINE_CHANNEL_SECRET || "",
+    });
+
+    const tokenResponse = await fetch("https://api.line.me/oauth2/v2.1/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: tokenParams.toString(),
+    });
+
+    const tokenData = await tokenResponse.json();
+
+    if (!tokenResponse.ok) {
+      throw new Error(
+        tokenData.error_description ||
+          tokenData.error ||
+          "Failed to get LINE token"
+      );
+    }
+
+    const profileResponse = await fetch("https://api.line.me/v2/profile", {
+      headers: {
+        Authorization: "Bearer " + tokenData.access_token,
+      },
+    });
+
+    const profile = await profileResponse.json();
+
+    if (!profileResponse.ok) {
+      throw new Error("Failed to get LINE profile");
+    }
+
+    const lineUserId = String(profile.userId || "");
+    const displayName = String(profile.displayName || "LINE User").trim();
+
+    if (!lineUserId) {
+      throw new Error("Missing LINE user id");
+    }
+
+    const lineEmail = "line_" + lineUserId + "@line.local";
+    const username = (displayName || "LINE User") + "_" + lineUserId.slice(-6);
+    const customerId = "LINE" + Date.now();
+
+    const [existingUsers] = await pool.query(
+      "SELECT user_id, username, email, membership_level, created_at, is_verified, status, last_login, customer_id FROM user WHERE email = ? LIMIT 1",
+      [lineEmail]
+    );
+
+    if (existingUsers.length > 0) {
+      const user = existingUsers[0];
+
+      await pool.query(
+        "UPDATE user SET last_login = CURRENT_TIMESTAMP, status = 'ACTIVE' WHERE user_id = ?",
+        [user.user_id]
+      );
+
+      return res.redirect(redirectToFrontend("success", "LINE login successful"));
+    }
+
+    await pool.query(
+      "INSERT INTO user (username, email, password_hash, membership_level, is_verified, status, customer_id) VALUES (?, ?, ?, 'FREE', 1, 'ACTIVE', ?)",
+      [username, lineEmail, lineUserId, customerId]
+    );
+
+    res.redirect(redirectToFrontend("success", "LINE register and login successful"));
+  } catch (error) {
+    console.error("Failed to login with LINE:", error);
+
+    res.redirect(
+      redirectToFrontend(
+        "failed",
+        error instanceof Error ? error.message : "LINE login failed"
+      )
+    );
+  }
+});
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`AI Shield Server Running: http://localhost:${PORT}`);
 });
+

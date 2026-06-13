@@ -306,7 +306,7 @@ resizeMode="contain"
       <TouchableOpacity
         style={styles.socialButton}
         onPress={() =>
-          Linking.openURL("https://access.line.me/oauth2/v2.1/login")
+          Linking.openURL("http://localhost:3000/api/line-login")
         }
       >
         <Image
@@ -671,5 +671,6 @@ fontSize: 15,
 fontWeight: "700",
 },
 });
+
 
 
