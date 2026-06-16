@@ -68,41 +68,155 @@ router.post("/register", async (req, res) => {
   }
 });
 
-// Google 登入
-router.post("/google-login", async (req, res) => {
-  const email = String(req.body.email || "").trim().toLowerCase();
-  const username = String(req.body.username || req.body.displayName || req.body.name || email.split("@")[0] || "").trim();
-  const googleId = String(req.body.googleId || req.body.uid || "").trim();
+// ==========================================
+// 🌟 Google 登入跳轉
+// ==========================================
+router.get("/google-login", (req, res) => {
+  const { redirect_uri } = req.query; 
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const backendRedirectUri = process.env.GOOGLE_REDIRECT_URI; 
 
-  if (!email) {
-    return res.status(400).json({ success: false, message: "Email is required" });
+  if (!clientId || !backendRedirectUri) {
+    return res.status(500).json({ success: false, message: "Google OAuth settings are missing in backend" });
+  }
+
+  const state = encodeURIComponent(redirect_uri || "");
+
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: clientId,
+    redirect_uri: backendRedirectUri,
+    state: state, 
+    scope: "profile email",
+  });
+
+  res.redirect("https://accounts.google.com/o/oauth2/v2/auth?" + params.toString());
+});
+
+// ==========================================
+// 🌟 修改後的 Google 登入回呼 (Callback)
+// ==========================================
+router.get("/google-callback", async (req, res) => {
+  const { code, state } = req.query;
+  const expoAppUrl = state ? decodeURIComponent(state) : "exp://";
+
+  if (!code) {
+    return res.send(`
+      <html>
+        <body>
+          <script>
+            window.location.href = "${expoAppUrl}?success=false&message=Missing_code";
+          </script>
+        </body>
+      </html>
+    `);
   }
 
   try {
-    const [existingUsers] = await pool.query("SELECT user_id, username, email, membership_level, created_at, is_verified, status, last_login, customer_id FROM user WHERE email = ? LIMIT 1", [email]);
+    // 1. 打向 Google API，用 code 交換 Token
+    const tokenParams = new URLSearchParams({
+      code,
+      client_id: process.env.GOOGLE_CLIENT_ID || "",
+      client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+      redirect_uri: process.env.GOOGLE_REDIRECT_URI || "",
+      grant_type: "authorization_code",
+    });
+
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: tokenParams.toString(),
+    });
+    const tokenData = await tokenResponse.json();
+
+    if (!tokenResponse.ok) {
+      throw new Error(tokenData.error_description || tokenData.error || "Failed to get Google token");
+    }
+
+    // 2. 使用 Access Token 拿使用者的 Google Profile 資料
+    const userResponse = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: { Authorization: "Bearer " + tokenData.access_token },
+    });
+    const googleUser = await userResponse.json();
+
+    if (!userResponse.ok) throw new Error("Failed to get Google user info");
+
+    const googleUserId = String(googleUser.id || "");
+    const googleEmail = String(googleUser.email || "").trim().toLowerCase();
+    const displayName = String(googleUser.name || "Google User").trim();
+
+    if (!googleUserId || !googleEmail) throw new Error("Missing Google user data");
+
+    const username = (displayName || "Google User") + "_" + googleUserId.slice(-6);
+    const customerId = "GGL" + Date.now();
+
+    // 3. 檢查資料庫是否已存在該 Email 的使用者
+    const [existingUsers] = await pool.query(
+      "SELECT user_id, username, email, membership_level, created_at, is_verified, status, last_login, customer_id FROM user WHERE email = ? LIMIT 1", 
+      [googleEmail]
+    );
+
+    let finalToken = "google_success_auth"; // 這邊可以根據需求換成你自己核發的 JWT Token
 
     if (existingUsers.length > 0) {
       const user = existingUsers[0];
       await pool.query("UPDATE user SET last_login = CURRENT_TIMESTAMP, status = 'ACTIVE' WHERE user_id = ?", [user.user_id]);
-      return res.json({ success: true, message: "Google login successful", data: { ...user, last_login: new Date() } });
+      
+      // 🌟 改用 HTML 強制手機跳轉，不再使用 res.redirect
+      return res.send(`
+        <html>
+          <head><title>Authentication Success</title></head>
+          <body>
+            <p style="font-size:18px; text-align:center; margin-top:50px;">驗證成功！正在返回 App...</p>
+            <script>
+              window.location.href = "${expoAppUrl}?success=true&token=${finalToken}";
+              setTimeout(function() { window.location.href = "${expoAppUrl}?success=true&token=${finalToken}"; }, 500);
+            </script>
+          </body>
+        </html>
+      `);
     }
 
-    const customerId = "GOOGLE" + Date.now();
-    const [result] = await pool.query("INSERT INTO user (username, email, password_hash, membership_level, is_verified, status, customer_id) VALUES (?, ?, ?, 'FREE', 1, 'ACTIVE', ?)", [username || email.split("@")[0], email, googleId || "GOOGLE_LOGIN", customerId]);
-
-    res.status(201).json({
-      success: true,
-      message: "Google register and login successful",
-      data: { user_id: result.insertId, username: username || email.split("@")[0], email, membership_level: "FREE", is_verified: 1, status: "ACTIVE", customer_id: customerId },
-    });
+    // 使用者不存在 -> 自動註冊進入資料庫
+    await pool.query(
+      "INSERT INTO user (username, email, password_hash, membership_level, is_verified, status, customer_id) VALUES (?, ?, ?, 'FREE', 1, 'ACTIVE', ?)", 
+      [username, googleEmail, googleUserId, customerId]
+    );
+    
+    // 🌟 改用 HTML 強制手機跳轉
+    return res.send(`
+      <html>
+        <head><title>Authentication Success</title></head>
+        <body>
+          <p style="font-size:18px; text-align:center; margin-top:50px;">註冊成功！正在返回 App...</p>
+          <script>
+            window.location.href = "${expoAppUrl}?success=true&token=${finalToken}";
+            setTimeout(function() { window.location.href = "${expoAppUrl}?success=true&token=${finalToken}"; }, 500);
+          </script>
+        </body>
+      </html>
+    `);
   } catch (error) {
     console.error("Failed to login with Google:", error);
-    res.status(500).json({ success: false, message: "Failed to login with Google", error: error.message });
+    const errorMsg = encodeURIComponent(error.message);
+    return res.send(`
+      <html>
+        <body>
+          <script>
+            window.location.href = "${expoAppUrl}?success=false&message=${errorMsg}";
+          </script>
+        </body>
+      </html>
+    `);
   }
 });
 
-// LINE 登入跳轉
+
+// ==========================================
+// 🌟 LINE 登入跳轉
+// ==========================================
 router.get("/line-login", (req, res) => {
+  const { redirect_uri } = req.query; 
   const channelId = process.env.LINE_CHANNEL_ID;
   const redirectUri = process.env.LINE_REDIRECT_URI;
 
@@ -110,27 +224,50 @@ router.get("/line-login", (req, res) => {
     return res.status(500).json({ success: false, message: "LINE login settings are missing" });
   }
 
-  const state = "line_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+  const state = "line_" + Date.now() + "_" + encodeURIComponent(redirect_uri || "");
   const params = new URLSearchParams({ response_type: "code", client_id: channelId, redirect_uri: redirectUri, state, scope: "profile openid" });
 
   res.redirect("https://access.line.me/oauth2/v2.1/authorize?" + params.toString());
 });
 
-// LINE 登入回呼 (Callback)
+// ==========================================
+// 🌟 修改後的 LINE 登入回呼 (Callback)
+// ==========================================
 router.get("/line-login/callback", async (req, res) => {
   const code = String(req.query.code || "");
   const error = String(req.query.error || "");
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8082";
+  const state = String(req.query.state || "");
 
-  const redirectToFrontend = (status, message) => {
-    const target = new URL("/line-callback", frontendUrl);
-    target.searchParams.set("status", status);
-    if (message) target.searchParams.set("message", message);
-    return target.toString();
-  };
+  let expoAppUrl = "exp://";
+  if (state.includes("_")) {
+    const parts = state.split("_");
+    if (parts.length >= 3) {
+      expoAppUrl = decodeURIComponent(parts.slice(2).join("_"));
+    }
+  }
 
-  if (error) return res.redirect(redirectToFrontend("failed", error));
-  if (!code) return res.redirect(redirectToFrontend("failed", "Missing LINE code"));
+  if (error) {
+    return res.send(`
+      <html>
+        <body>
+          <script>
+            window.location.href = "${expoAppUrl}?success=false&message=${encodeURIComponent(error)}";
+          </script>
+        </body>
+      </html>
+    `);
+  }
+  if (!code) {
+    return res.send(`
+      <html>
+        <body>
+          <script>
+            window.location.href = "${expoAppUrl}?success=false&message=Missing_code";
+          </script>
+        </body>
+      </html>
+    `);
+  }
 
   try {
     const tokenParams = new URLSearchParams({
@@ -167,17 +304,54 @@ router.get("/line-login/callback", async (req, res) => {
 
     const [existingUsers] = await pool.query("SELECT user_id, username, email, membership_level, created_at, is_verified, status, last_login, customer_id FROM user WHERE email = ? LIMIT 1", [lineEmail]);
 
+    let finalToken = "line_success_auth";
+
     if (existingUsers.length > 0) {
       const user = existingUsers[0];
       await pool.query("UPDATE user SET last_login = CURRENT_TIMESTAMP, status = 'ACTIVE' WHERE user_id = ?", [user.user_id]);
-      return res.redirect(redirectToFrontend("success", "LINE login successful"));
+      
+      // 🌟 改用 HTML 強制手機跳轉
+      return res.send(`
+        <html>
+          <head><title>Authentication Success</title></head>
+          <body>
+            <p style="font-size:18px; text-align:center; margin-top:50px;">驗證成功！正在返回 App...</p>
+            <script>
+              window.location.href = "${expoAppUrl}?success=true&token=${finalToken}";
+              setTimeout(function() { window.location.href = "${expoAppUrl}?success=true&token=${finalToken}"; }, 500);
+            </script>
+          </body>
+        </html>
+      `);
     }
 
     await pool.query("INSERT INTO user (username, email, password_hash, membership_level, is_verified, status, customer_id) VALUES (?, ?, ?, 'FREE', 1, 'ACTIVE', ?)", [username, lineEmail, lineUserId, customerId]);
-    res.redirect(redirectToFrontend("success", "LINE register and login successful"));
+    
+    // 🌟 改用 HTML 強制手機跳轉
+    return res.send(`
+      <html>
+        <head><title>Authentication Success</title></head>
+        <body>
+          <p style="font-size:18px; text-align:center; margin-top:50px;">註冊成功！正在返回 App...</p>
+          <script>
+            window.location.href = "${expoAppUrl}?success=true&token=${finalToken}";
+            setTimeout(function() { window.location.href = "${expoAppUrl}?success=true&token=${finalToken}"; }, 500);
+          </script>
+        </body>
+      </html>
+    `);
   } catch (error) {
     console.error("Failed to login with LINE:", error);
-    res.redirect(redirectToFrontend("failed", error instanceof Error ? error.message : "LINE login failed"));
+    const errorMsg = encodeURIComponent(error.message);
+    return res.send(`
+      <html>
+        <body>
+          <script>
+            window.location.href = "${expoAppUrl}?success=false&message=${errorMsg}";
+          </script>
+        </body>
+      </html>
+    `);
   }
 });
 
