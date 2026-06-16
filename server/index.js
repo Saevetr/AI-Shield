@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const mysql = require("mysql2/promise");
+const sql = require("mssql");
 require("dotenv").config();
 
 const app = express();
@@ -8,16 +8,102 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || "localhost",
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "",
-  database: process.env.DB_NAME || "test_db",
-  port: Number(process.env.DB_PORT || 3306),
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-});
+const dbConfig = {
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  server: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  port: Number(process.env.DB_PORT || 1433),
+  options: {
+    encrypt: String(process.env.DB_ENCRYPT || "true").toLowerCase() === "true",
+    trustServerCertificate:
+      String(process.env.DB_TRUST_SERVER_CERTIFICATE || "false").toLowerCase() === "true",
+  },
+};
+
+let sqlPoolPromise;
+
+function getSqlPool() {
+  if (!sqlPoolPromise) {
+    sqlPoolPromise = sql.connect(dbConfig);
+  }
+
+  return sqlPoolPromise;
+}
+
+function convertLimitToTop(queryText) {
+  const limitMatch = queryText.match(/\s+LIMIT\s+(\d+)\s*;?\s*$/i);
+
+  if (!limitMatch) {
+    return queryText;
+  }
+
+  const limitNumber = limitMatch[1];
+  const queryWithoutLimit = queryText.replace(/\s+LIMIT\s+\d+\s*;?\s*$/i, "");
+
+  return queryWithoutLimit.replace(/^\s*SELECT\s+/i, (selectKeyword) => {
+    return `${selectKeyword}TOP (${limitNumber}) `;
+  });
+}
+
+function convertMysqlToSqlServer(queryText) {
+  let convertedQuery = String(queryText || "")
+    .replace(/WHERE\s+TABLE_SCHEMA\s*=\s*DATABASE\(\)/gi, "WHERE TABLE_CATALOG = DB_NAME()")
+    .replace(/AND\s+TABLE_SCHEMA\s*=\s*DATABASE\(\)/gi, "AND TABLE_CATALOG = DB_NAME()")
+    .replace(/`([^`]+)`/g, "[$1]")
+    .replace(/\bCAST\(([^)]*)\s+AS\s+CHAR\)/gi, "CAST($1 AS NVARCHAR(MAX))")
+    .replace(/\bFROM\s+user\b/gi, "FROM [user]")
+    .replace(/\bUPDATE\s+user\b/gi, "UPDATE [user]")
+    .replace(/\bINSERT\s+INTO\s+user\b/gi, "INSERT INTO [user]")
+    .replace(/\bNOW\(\)/gi, "GETDATE()");
+
+  convertedQuery = convertLimitToTop(convertedQuery);
+
+  let paramIndex = 0;
+  convertedQuery = convertedQuery.replace(/\?/g, () => `@p${paramIndex++}`);
+
+  return convertedQuery;
+}
+
+const pool = {
+  async query(queryText, params = []) {
+    const sqlPool = await getSqlPool();
+    const request = sqlPool.request();
+
+    params.forEach((value, index) => {
+      request.input(`p${index}`, value === undefined ? null : value);
+    });
+
+    const convertedQuery = convertMysqlToSqlServer(queryText);
+
+    try {
+      const result = await request.query(convertedQuery);
+      const isSelect = /^\s*SELECT/i.test(convertedQuery);
+
+      if (isSelect) {
+        return [result.recordset || [], result];
+      }
+
+      return [
+        {
+          affectedRows: result.rowsAffected?.[0] || 0,
+          rowsAffected: result.rowsAffected,
+          insertId: result.recordset?.[0]?.insertId,
+        },
+        result,
+      ];
+    } catch (error) {
+      console.error("SQL Server query failed");
+      console.error("Original query:", queryText);
+      console.error("Converted query:", convertedQuery);
+      throw error;
+    }
+  },
+
+  async execute(queryText, params = []) {
+    return this.query(queryText, params);
+  },
+};
 
 app.get("/", (req, res) => {
   res.send("AI Shield Server Running!");
@@ -956,8 +1042,9 @@ app.post("/api/register", async (req, res) => {
 
     const [result] = await pool.query(
       `
-      INSERT INTO \`user\`
+  INSERT INTO \`user\`
       (username, email, password_hash, membership_level, is_verified, status, customer_id)
+      OUTPUT INSERTED.user_id AS insertId
       VALUES (?, ?, ?, 'FREE', 1, 'ACTIVE', ?)
       `,
       [username, email, password, customerId]
@@ -1032,9 +1119,9 @@ app.post("/api/google-login", async (req, res) => {
     const customerId = "GOOGLE" + Date.now();
 
     const [result] = await pool.query(
-      "INSERT INTO user (username, email, password_hash, membership_level, is_verified, status, customer_id) VALUES (?, ?, ?, 'FREE', 1, 'ACTIVE', ?)",
-      [username || email.split("@")[0], email, googleId || "GOOGLE_LOGIN", customerId]
-    );
+  "INSERT INTO user (username, email, password_hash, membership_level, is_verified, status, customer_id) OUTPUT INSERTED.user_id AS insertId VALUES (?, ?, ?, 'FREE', 1, 'ACTIVE', ?)",
+  [username || email.split("@")[0], email, googleId || "GOOGLE_LOGIN", customerId]
+);
 
     res.status(201).json({
       success: true,
