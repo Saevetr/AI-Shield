@@ -116,14 +116,16 @@ try {
 
 };
 
-return ( <ScrollView contentContainerStyle={styles.scrollContent}> <View style={styles.container}>
+return (
+  <ScrollView contentContainerStyle={styles.scrollContent}>
+    <View style={styles.container}>
 <Image
 source={require("@/assets/images/hexagon.png")}
 style={styles.hexagonBg}
 resizeMode="contain"
 />
 
-```
+
     <View style={styles.logoContainer}>
       <Image
         source={require("@/assets/images/auth-logo.png")}
