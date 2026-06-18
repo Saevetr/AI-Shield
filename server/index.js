@@ -34,9 +34,7 @@ function getSqlPool() {
 function convertLimitToTop(queryText) {
   const limitMatch = queryText.match(/\s+LIMIT\s+(\d+)\s*;?\s*$/i);
 
-  if (!limitMatch) {
-    return queryText;
-  }
+  if (!limitMatch) return queryText;
 
   const limitNumber = limitMatch[1];
   const queryWithoutLimit = queryText.replace(/\s+LIMIT\s+\d+\s*;?\s*$/i, "");
@@ -105,6 +103,385 @@ const pool = {
   },
 };
 
+async function getTableColumns(tableName) {
+  const [columns] = await pool.query(
+    `
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = ?
+    `,
+    [tableName]
+  );
+
+  return columns.map((item) => item.COLUMN_NAME);
+}
+
+async function tableExists(tableName) {
+  const [tables] = await pool.query(
+    `
+    SELECT TABLE_NAME
+    FROM INFORMATION_SCHEMA.TABLES
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = ?
+    `,
+    [tableName]
+  );
+
+  return tables.length > 0;
+}
+
+function normalizePhone(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+async function searchTablesByValue(searchTables, searchValue, options = {}) {
+  const matches = [];
+  const value = String(searchValue || "").trim();
+
+  for (const [tableName, possibleColumns] of Object.entries(searchTables)) {
+    const existingColumns = await getTableColumns(tableName);
+    const searchableColumns = possibleColumns.filter((column) =>
+      existingColumns.includes(column)
+    );
+
+    if (searchableColumns.length === 0) continue;
+
+    const whereSql = searchableColumns
+      .map((column) => {
+        if (options.normalizePhone) {
+          return `REPLACE(REPLACE(REPLACE(REPLACE(CAST(\`${column}\` AS CHAR), '-', ''), ' ', ''), '(', ''), ')', '') LIKE ?`;
+        }
+
+        return `CAST(\`${column}\` AS CHAR) LIKE ?`;
+      })
+      .join(" OR ");
+
+    const params = searchableColumns.map(() => `%${value}%`);
+
+    const [rows] = await pool.query(
+      `
+      SELECT *, ? AS source_table
+      FROM \`${tableName}\`
+      WHERE ${whereSql}
+      LIMIT 10
+      `,
+      [tableName, ...params]
+    );
+
+    matches.push(...rows);
+  }
+
+  return matches;
+}
+
+async function loadKeywordRows() {
+  try {
+    const [rows] = await pool.query(
+      "SELECT id, keyword, level, score, reason FROM message_keywords"
+    );
+
+    return {
+      tableName: "message_keywords",
+      rows,
+    };
+  } catch (messageKeywordError) {
+    console.log(
+      "message_keywords 不存在或無法查詢，嘗試 fraud_keywords:",
+      messageKeywordError.message
+    );
+  }
+
+  try {
+    const [rows] = await pool.query(
+      "SELECT id, keyword, level, score, reason FROM fraud_keywords"
+    );
+
+    return {
+      tableName: "fraud_keywords",
+      rows,
+    };
+  } catch (fraudKeywordError) {
+    console.log(
+      "fraud_keywords 不存在或無法查詢，改用內建關鍵字:",
+      fraudKeywordError.message
+    );
+  }
+
+  const fallbackKeywords = [
+    {
+      id: 1,
+      keyword: "投資",
+      level: "high",
+      score: 88,
+      reason: "常見投資詐騙關鍵字",
+    },
+    {
+      id: 2,
+      keyword: "獲利",
+      level: "high",
+      score: 88,
+      reason: "常見高報酬詐騙話術",
+    },
+    {
+      id: 3,
+      keyword: "穩賺",
+      level: "high",
+      score: 90,
+      reason: "保證獲利通常為高風險話術",
+    },
+    {
+      id: 4,
+      keyword: "保證",
+      level: "medium",
+      score: 65,
+      reason: "疑似保證收益話術",
+    },
+    {
+      id: 5,
+      keyword: "貸款",
+      level: "medium",
+      score: 60,
+      reason: "常見貸款詐騙關鍵字",
+    },
+    {
+      id: 6,
+      keyword: "中獎",
+      level: "high",
+      score: 85,
+      reason: "常見中獎詐騙關鍵字",
+    },
+    {
+      id: 7,
+      keyword: "匯款",
+      level: "medium",
+      score: 65,
+      reason: "涉及金流，需提高警覺",
+    },
+    {
+      id: 8,
+      keyword: "點擊連結",
+      level: "high",
+      score: 85,
+      reason: "疑似釣魚連結話術",
+    },
+    {
+      id: 9,
+      keyword: "驗證碼",
+      level: "high",
+      score: 85,
+      reason: "要求驗證碼通常為高風險行為",
+    },
+    {
+      id: 10,
+      keyword: "加入群組",
+      level: "medium",
+      score: 60,
+      reason: "常見投資群組引流話術",
+    },
+  ];
+
+  return {
+    tableName: "built_in_fallback",
+    rows: fallbackKeywords,
+  };
+}
+
+async function checkPhoneValue(rawPhone) {
+  const phone = normalizePhone(rawPhone);
+
+  if (phone.length < 6) {
+    return {
+      success: false,
+      statusCode: 400,
+      message: "Invalid phone number",
+    };
+  }
+
+  const searchTables = {
+    fraud_database: [
+      "phone",
+      "phone_number",
+      "telephone",
+      "mobile",
+      "number",
+      "contact",
+      "account",
+      "content",
+      "fraud_value",
+    ],
+    blacklist: [
+      "phone",
+      "phone_number",
+      "telephone",
+      "mobile",
+      "number",
+      "keyword",
+      "reason",
+    ],
+    line_database: [
+      "phone",
+      "phone_number",
+      "telephone",
+      "mobile",
+      "number",
+      "line_id",
+      "account",
+      "content",
+    ],
+  };
+
+  const matches = await searchTablesByValue(searchTables, phone, {
+    normalizePhone: true,
+  });
+
+  const isScam = matches.length > 0;
+  const score = isScam ? 88 : 15;
+  const level = isScam ? "high" : "low";
+  const carrier = "未知電信";
+  const message = isScam
+    ? "注意！此號碼有疑似詐騙紀錄。"
+    : "安全！目前資料庫中無此號碼紀錄。";
+
+  return {
+    success: true,
+    phone,
+    isScam,
+    isFraud: isScam,
+    exists: isScam,
+    status: isScam ? "scam" : "safe",
+    level,
+    score,
+    carrier,
+    message,
+    matches,
+    data: {
+      isScam,
+      level,
+      score,
+      carrier,
+      message,
+      matches,
+    },
+    detail: {
+      isScam,
+      level,
+      score,
+      carrier,
+      message,
+    },
+  };
+}
+
+async function handlePhoneCheck(req, res) {
+  try {
+    const phoneInput = req.body?.phone || req.query?.phone;
+    const result = await checkPhoneValue(phoneInput);
+
+    if (result.success === false) {
+      return res.status(result.statusCode || 400).json(result);
+    }
+
+    return res.json(result);
+  } catch (error) {
+    console.error("Failed to check phone:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to check phone",
+      error: error.message,
+    });
+  }
+}
+
+async function analyzeMessageText(text) {
+  const messageText = String(text || "").trim();
+
+  if (messageText.length < 2) {
+    return {
+      success: false,
+      statusCode: 400,
+      message: "Invalid message text",
+    };
+  }
+
+  const { tableName, rows: keywords } = await loadKeywordRows();
+
+  const matchedKeywords = keywords.filter((item) => {
+    const keyword = String(item.keyword || "").trim();
+    return keyword && messageText.includes(keyword);
+  });
+
+  let level = "low";
+  let score = 15;
+
+  if (matchedKeywords.length > 0) {
+    const maxScore = Math.max(
+      ...matchedKeywords.map((item) => Number(item.score || 0))
+    );
+
+    score = maxScore || 80;
+
+    if (score >= 80) level = "high";
+    else if (score >= 50) level = "medium";
+    else level = "low";
+  }
+
+  const isScam = matchedKeywords.length > 0;
+  const message = isScam
+    ? "此訊息包含疑似詐騙關鍵字，請提高警覺。"
+    : "目前未發現明顯詐騙關鍵字。";
+
+  return {
+    success: true,
+    sourceTable: tableName,
+    text: messageText,
+    isScam,
+    level,
+    score,
+    message,
+    matchedKeywords,
+    data: {
+      isScam,
+      level,
+      score,
+      message,
+      matchedKeywords,
+    },
+    detail: {
+      isScam,
+      level,
+      score,
+      message,
+      reason:
+        matchedKeywords.length > 0
+          ? matchedKeywords.map((item) => item.reason || item.keyword).join("、")
+          : "",
+    },
+  };
+}
+
+async function handleMessageCheck(req, res) {
+  try {
+    const messageInput =
+      req.body?.text || req.body?.message || req.query?.text || req.query?.message;
+
+    const result = await analyzeMessageText(messageInput);
+
+    if (result.success === false) {
+      return res.status(result.statusCode || 400).json(result);
+    }
+
+    return res.json(result);
+  } catch (error) {
+    console.error("Failed to analyze message:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to analyze message",
+      error: error.message,
+    });
+  }
+}
+
 app.get("/", (req, res) => {
   res.send("AI Shield Server Running!");
 });
@@ -117,13 +494,9 @@ app.get("/api/anti-fraud-knowledge", async (req, res) => {
        ORDER BY created_at DESC`
     );
 
-    res.json({
-      success: true,
-      data: rows,
-    });
+    res.json({ success: true, data: rows });
   } catch (error) {
     console.error("Failed to query anti_fraud_knowledge:", error);
-
     res.status(500).json({
       success: false,
       message: "Failed to query anti-fraud knowledge",
@@ -176,10 +549,10 @@ app.get("/api/line-database", async (req, res) => {
 
 app.get("/api/message-keywords", async (req, res) => {
   try {
-    const [rows] = await pool.query("SELECT * FROM message_keywords");
-    res.json({ success: true, data: rows });
+    const { tableName, rows } = await loadKeywordRows();
+    res.json({ success: true, sourceTable: tableName, data: rows });
   } catch (error) {
-    console.error("Failed to query message_keywords:", error);
+    console.error("Failed to query message keywords:", error);
     res.status(500).json({
       success: false,
       message: "Failed to query message keywords",
@@ -202,124 +575,10 @@ app.get("/api/users", async (req, res) => {
   }
 });
 
-app.get("/api/check-phone", async (req, res) => {
-  const phone = String(req.query.phone || "").replace(/\D/g, "");
-
-  if (phone.length < 6) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid phone number",
-    });
-  }
-
-  try {
-    const searchTables = {
-      fraud_database: [
-        "phone",
-        "phone_number",
-        "telephone",
-        "mobile",
-        "number",
-        "contact",
-        "account",
-        "content",
-      ],
-      blacklist: [
-        "phone",
-        "phone_number",
-        "telephone",
-        "mobile",
-        "number",
-        "keyword",
-        "reason",
-      ],
-      line_database: [
-        "phone",
-        "phone_number",
-        "telephone",
-        "mobile",
-        "number",
-        "line_id",
-        "account",
-        "content",
-      ],
-    };
-
-    const matches = [];
-
-    for (const [tableName, possibleColumns] of Object.entries(searchTables)) {
-      const [columns] = await pool.query(
-        `
-        SELECT COLUMN_NAME
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = ?
-        `,
-        [tableName]
-      );
-
-      const existingColumns = columns.map((item) => item.COLUMN_NAME);
-      const searchableColumns = possibleColumns.filter((column) =>
-        existingColumns.includes(column)
-      );
-
-      if (searchableColumns.length === 0) {
-        continue;
-      }
-
-      const whereSql = searchableColumns
-        .map(
-          (column) =>
-            `REPLACE(REPLACE(REPLACE(REPLACE(CAST(\`${column}\` AS CHAR), '-', ''), ' ', ''), '(', ''), ')', '') LIKE ?`
-        )
-        .join(" OR ");
-
-      const params = searchableColumns.map(() => `%${phone}%`);
-
-      const [rows] = await pool.query(
-        `
-        SELECT *, ? AS source_table
-        FROM \`${tableName}\`
-        WHERE ${whereSql}
-        LIMIT 10
-        `,
-        [tableName, ...params]
-      );
-
-      matches.push(...rows);
-    }
-
-    const isScam = matches.length > 0;
-
-    res.json({
-      success: true,
-      phone,
-      isScam,
-      carrier: "未知電信",
-      score: isScam ? 88 : 15,
-      message: isScam
-        ? "注意！此號碼有疑似詐騙紀錄。"
-        : "安全！目前資料庫中無此號碼紀錄。",
-      data: matches,
-      detail: {
-        isScam,
-        score: isScam ? 88 : 15,
-        carrier: "未知電信",
-        message: isScam
-          ? "注意！此號碼有疑似詐騙紀錄。"
-          : "安全！目前資料庫中無此號碼紀錄。",
-      },
-    });
-  } catch (error) {
-    console.error("Failed to check phone:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to check phone",
-      error: error.message,
-    });
-  }
-});
+app.get("/api/check-phone", handlePhoneCheck);
+app.post("/api/check-phone", handlePhoneCheck);
+app.post("/api/phone-check", handlePhoneCheck);
+app.post("/api/phone-query", handlePhoneCheck);
 
 app.get("/api/check-line", async (req, res) => {
   const lineId = String(
@@ -335,79 +594,66 @@ app.get("/api/check-line", async (req, res) => {
 
   try {
     const searchTables = {
-      line_database: ["line_id", "lineId", "line_account", "account", "id", "keyword", "content", "name"],
-      blacklist: ["line_id", "lineId", "line_account", "account", "keyword", "reason"],
-      fraud_database: ["line_id", "lineId", "line_account", "account", "content", "keyword"],
+      line_database: [
+        "line_id",
+        "lineId",
+        "line_account",
+        "account",
+        "id",
+        "keyword",
+        "content",
+        "name",
+      ],
+      blacklist: [
+        "line_id",
+        "lineId",
+        "line_account",
+        "account",
+        "keyword",
+        "reason",
+      ],
+      fraud_database: [
+        "line_id",
+        "lineId",
+        "line_account",
+        "account",
+        "content",
+        "keyword",
+      ],
     };
 
-    const matches = [];
-
-    for (const [tableName, possibleColumns] of Object.entries(searchTables)) {
-      const [columns] = await pool.query(
-        `
-        SELECT COLUMN_NAME
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = ?
-        `,
-        [tableName]
-      );
-
-      const existingColumns = columns.map((item) => item.COLUMN_NAME);
-      const searchableColumns = possibleColumns.filter((column) =>
-        existingColumns.includes(column)
-      );
-
-      if (searchableColumns.length === 0) continue;
-
-      const whereSql = searchableColumns
-        .map((column) => `CAST(\`${column}\` AS CHAR) LIKE ?`)
-        .join(" OR ");
-
-      const params = searchableColumns.map(() => `%${lineId}%`);
-
-      const [rows] = await pool.query(
-        `
-        SELECT *, ? AS source_table
-        FROM \`${tableName}\`
-        WHERE ${whereSql}
-        LIMIT 10
-        `,
-        [tableName, ...params]
-      );
-
-      matches.push(...rows);
-    }
-
+    const matches = await searchTablesByValue(searchTables, lineId);
     const isScam = matches.length > 0;
+    const level = isScam ? "high" : "low";
+    const score = isScam ? 88 : 15;
+    const status = isScam ? "危險帳號" : "safe";
+    const message = isScam
+      ? "注意！此 LINE ID 有疑似詐騙紀錄。"
+      : "安全！目前資料庫中無此 LINE ID 紀錄。";
+    const reason = isScam ? "資料庫中找到相關紀錄。" : "";
 
     res.json({
       success: true,
       lineId,
       isScam,
-      level: isScam ? "high" : "low",
-      score: isScam ? 88 : 15,
-      status: isScam ? "危險帳號" : "safe",
-      message: isScam
-        ? "注意！此 LINE ID 有疑似詐騙紀錄。"
-        : "安全！目前資料庫中無此 LINE ID 紀錄。",
-      reason: isScam ? "資料庫中找到相關紀錄。" : "",
+      level,
+      score,
+      status,
+      message,
+      reason,
       data: matches,
       detail: {
         lineId,
         isScam,
-        level: isScam ? "high" : "low",
-        score: isScam ? 88 : 15,
-        status: isScam ? "危險帳號" : "safe",
-        message: isScam
-          ? "注意！此 LINE ID 有疑似詐騙紀錄。"
-          : "安全！目前資料庫中無此 LINE ID 紀錄。",
-        reason: isScam ? "資料庫中找到相關紀錄。" : "",
+        level,
+        score,
+        status,
+        message,
+        reason,
       },
     });
   } catch (error) {
     console.error("Failed to check LINE ID:", error);
-
     res.status(500).json({
       success: false,
       message: "Failed to check LINE ID",
@@ -416,196 +662,20 @@ app.get("/api/check-line", async (req, res) => {
   }
 });
 
-async function analyzeMessageText(text) {
-  const messageText = String(text || "").trim();
-
-  if (messageText.length < 2) {
-    return {
-      success: false,
-      statusCode: 400,
-      message: "Invalid message text",
-    };
-  }
-
-  const [keywords] = await pool.query(
-    "SELECT id, keyword, level, score, reason FROM message_keywords"
-  );
-
-  const matchedKeywords = keywords.filter((item) => {
-    const keyword = String(item.keyword || "").trim();
-    return keyword && messageText.includes(keyword);
-  });
-
-  let level = "low";
-  let score = 15;
-
-  if (matchedKeywords.length > 0) {
-    const maxScore = Math.max(
-      ...matchedKeywords.map((item) => Number(item.score || 0))
-    );
-
-    score = maxScore || 80;
-
-    if (score >= 80) {
-      level = "high";
-    } else if (score >= 50) {
-      level = "medium";
-    } else {
-      level = "low";
-    }
-  }
-
-  const isScam = matchedKeywords.length > 0 && score >= 50;
-
-  return {
-    success: true,
-    text: messageText,
-    isScam,
-    level,
-    score,
-    message: isScam
-      ? "此訊息包含疑似詐騙關鍵字，請提高警覺。"
-      : "目前未發現明顯詐騙關鍵字。",
-    matchedKeywords,
-    data: {
-      isScam,
-      level,
-      score,
-      message: isScam
-        ? "此訊息包含疑似詐騙關鍵字，請提高警覺。"
-        : "目前未發現明顯詐騙關鍵字。",
-      matchedKeywords,
-    },
-    detail: {
-      isScam,
-      level,
-      score,
-      message: isScam
-        ? "此訊息包含疑似詐騙關鍵字，請提高警覺。"
-        : "目前未發現明顯詐騙關鍵字。",
-      reason:
-        matchedKeywords.length > 0
-          ? matchedKeywords.map((item) => item.reason || item.keyword).join("、")
-          : "",
-    },
-  };
-}
-
-app.get("/api/analyze-message", async (req, res) => {
-  try {
-    const result = await analyzeMessageText(req.query.text || req.query.message);
-
-    if (result.success === false) {
-      return res.status(result.statusCode || 400).json(result);
-    }
-
-    res.json(result);
-  } catch (error) {
-    console.error("Failed to analyze message:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to analyze message",
-      error: error.message,
-    });
-  }
-});
-
-app.post("/api/analyze-message", async (req, res) => {
-  try {
-    const result = await analyzeMessageText(req.body.text || req.body.message);
-
-    if (result.success === false) {
-      return res.status(result.statusCode || 400).json(result);
-    }
-
-    res.json(result);
-  } catch (error) {
-    console.error("Failed to analyze message:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to analyze message",
-      error: error.message,
-    });
-  }
-});
-
-app.get("/api/check-message", async (req, res) => {
-  try {
-    const result = await analyzeMessageText(req.query.text || req.query.message);
-
-    if (result.success === false) {
-      return res.status(result.statusCode || 400).json(result);
-    }
-
-    res.json(result);
-  } catch (error) {
-    console.error("Failed to check message:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to check message",
-      error: error.message,
-    });
-  }
-});
-
-app.post("/api/check-message", async (req, res) => {
-  try {
-    const result = await analyzeMessageText(req.body.text || req.body.message);
-
-    if (result.success === false) {
-      return res.status(result.statusCode || 400).json(result);
-    }
-
-    res.json(result);
-  } catch (error) {
-    console.error("Failed to check message:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to check message",
-      error: error.message,
-    });
-  }
-});
+app.get("/api/analyze-message", handleMessageCheck);
+app.post("/api/analyze-message", handleMessageCheck);
+app.get("/api/check-message", handleMessageCheck);
+app.post("/api/check-message", handleMessageCheck);
 
 app.get("/api/home/top-fraud-types", async (req, res) => {
   try {
     const defaultTopTypes = [
-      {
-        rank: 1,
-        name: "網路購物詐騙",
-        count: 128,
-        icon: "cart",
-      },
-      {
-        rank: 2,
-        name: "假投資詐騙",
-        count: 34,
-        icon: "trending-up",
-      },
-      {
-        rank: 3,
-        name: "假交友(投資詐財)詐騙",
-        count: 24,
-        icon: "heart",
-      },
+      { rank: 1, name: "網路購物詐騙", count: 128, icon: "cart" },
+      { rank: 2, name: "假投資詐騙", count: 34, icon: "trending-up" },
+      { rank: 3, name: "假交友(投資詐財)詐騙", count: 24, icon: "heart" },
     ];
 
-    // 先檢查 fraud_database 有沒有可用欄位
-    const [columns] = await pool.query(
-      `
-      SELECT COLUMN_NAME
-      FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = 'fraud_database'
-      `
-    );
-
-    const existingColumns = columns.map((item) => item.COLUMN_NAME);
-
+    const existingColumns = await getTableColumns("fraud_database");
     const possibleTypeColumns = [
       "fraud_type",
       "type",
@@ -619,13 +689,8 @@ app.get("/api/home/top-fraud-types", async (req, res) => {
       existingColumns.includes(column)
     );
 
-    // 如果 fraud_database 沒有分類欄位，就先回傳預設 TOP 3
     if (!typeColumn) {
-      return res.json({
-        success: true,
-        source: "default",
-        data: defaultTopTypes,
-      });
+      return res.json({ success: true, source: "default", data: defaultTopTypes });
     }
 
     const [rows] = await pool.query(
@@ -641,15 +706,10 @@ app.get("/api/home/top-fraud-types", async (req, res) => {
     );
 
     if (rows.length === 0) {
-      return res.json({
-        success: true,
-        source: "default",
-        data: defaultTopTypes,
-      });
+      return res.json({ success: true, source: "default", data: defaultTopTypes });
     }
 
     const iconMap = ["cart", "trending-up", "heart"];
-
     const data = rows.map((item, index) => ({
       rank: index + 1,
       name: item.name,
@@ -657,14 +717,9 @@ app.get("/api/home/top-fraud-types", async (req, res) => {
       icon: iconMap[index] || "alert-circle",
     }));
 
-    res.json({
-      success: true,
-      source: "database",
-      data,
-    });
+    res.json({ success: true, source: "database", data });
   } catch (error) {
     console.error("Failed to get top fraud types:", error);
-
     res.status(500).json({
       success: false,
       message: "Failed to get top fraud types",
@@ -676,25 +731,11 @@ app.get("/api/home/top-fraud-types", async (req, res) => {
 app.get("/api/home/summary", async (req, res) => {
   try {
     const getTableCount = async (tableName) => {
-      const [tables] = await pool.query(
-        `
-        SELECT TABLE_NAME
-        FROM INFORMATION_SCHEMA.TABLES
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = ?
-        `,
-        [tableName]
-      );
+      const exists = await tableExists(tableName);
+      if (!exists) return 0;
 
-      if (tables.length === 0) {
-        return 0;
-      }
-
-      const [rows] = await pool.query(
-        `SELECT COUNT(*) AS count FROM \`${tableName}\``
-      );
-
-      return Number(rows[0].count || 0);
+      const [rows] = await pool.query(`SELECT COUNT(*) AS count FROM \`${tableName}\``);
+      return Number(rows[0]?.count || 0);
     };
 
     const blacklistCount = await getTableCount("blacklist");
@@ -702,7 +743,9 @@ app.get("/api/home/summary", async (req, res) => {
     const reportCount = await getTableCount("report");
     const reportFraudCount = await getTableCount("report_fraud");
     const knowledgeCount = await getTableCount("anti_fraud_knowledge");
-    const keywordCount = await getTableCount("message_keywords");
+    const keywordCount =
+      (await getTableCount("message_keywords")) ||
+      (await getTableCount("fraud_keywords"));
     const userCount = await getTableCount("user");
 
     const totalReportCount = reportCount + reportFraudCount;
@@ -722,7 +765,6 @@ app.get("/api/home/summary", async (req, res) => {
     });
   } catch (error) {
     console.error("Failed to get home summary:", error);
-
     res.status(500).json({
       success: false,
       message: "Failed to get home summary",
@@ -742,6 +784,7 @@ app.get("/api/home/recent-risk-phones", async (req, res) => {
       "number",
       "contact",
       "account",
+      "fraud_value",
     ];
     const possibleReasonColumns = [
       "reason",
@@ -763,34 +806,19 @@ app.get("/api/home/recent-risk-phones", async (req, res) => {
     const results = [];
 
     for (const tableName of possibleTables) {
-      const [columns] = await pool.query(
-        `
-        SELECT COLUMN_NAME
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = ?
-        `,
-        [tableName]
-      );
+      const exists = await tableExists(tableName);
+      if (!exists) continue;
 
-      if (columns.length === 0) {
-        continue;
-      }
-
-      const existingColumns = columns.map((item) => item.COLUMN_NAME);
-
+      const existingColumns = await getTableColumns(tableName);
       const phoneColumn = possiblePhoneColumns.find((column) =>
         existingColumns.includes(column)
       );
 
-      if (!phoneColumn) {
-        continue;
-      }
+      if (!phoneColumn) continue;
 
       const reasonColumn = possibleReasonColumns.find((column) =>
         existingColumns.includes(column)
       );
-
       const dateColumn = possibleDateColumns.find((column) =>
         existingColumns.includes(column)
       );
@@ -798,14 +826,10 @@ app.get("/api/home/recent-risk-phones", async (req, res) => {
       const reasonSelect = reasonColumn
         ? `\`${reasonColumn}\` AS reason`
         : `'疑似高風險號碼' AS reason`;
-
       const dateSelect = dateColumn
         ? `\`${dateColumn}\` AS created_at`
         : `NULL AS created_at`;
-
-      const orderSql = dateColumn
-        ? `ORDER BY \`${dateColumn}\` DESC`
-        : "";
+      const orderSql = dateColumn ? `ORDER BY \`${dateColumn}\` DESC` : "";
 
       const [rows] = await pool.query(
         `
@@ -845,7 +869,6 @@ app.get("/api/home/recent-risk-phones", async (req, res) => {
     });
   } catch (error) {
     console.error("Failed to get recent risk phones:", error);
-
     res.status(500).json({
       success: false,
       message: "Failed to get recent risk phones",
@@ -883,21 +906,10 @@ app.get("/api/home/latest-knowledge", async (req, res) => {
       },
     ];
 
-    const [tables] = await pool.query(
-      `
-      SELECT TABLE_NAME
-      FROM INFORMATION_SCHEMA.TABLES
-      WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = 'anti_fraud_knowledge'
-      `
-    );
+    const exists = await tableExists("anti_fraud_knowledge");
 
-    if (tables.length === 0) {
-      return res.json({
-        success: true,
-        source: "default",
-        data: defaultKnowledge,
-      });
+    if (!exists) {
+      return res.json({ success: true, source: "default", data: defaultKnowledge });
     }
 
     const [rows] = await pool.query(
@@ -917,21 +929,12 @@ app.get("/api/home/latest-knowledge", async (req, res) => {
     );
 
     if (rows.length === 0) {
-      return res.json({
-        success: true,
-        source: "default",
-        data: defaultKnowledge,
-      });
+      return res.json({ success: true, source: "default", data: defaultKnowledge });
     }
 
-    res.json({
-      success: true,
-      source: "database",
-      data: rows,
-    });
+    res.json({ success: true, source: "database", data: rows });
   } catch (error) {
     console.error("Failed to get latest knowledge:", error);
-
     res.status(500).json({
       success: false,
       message: "Failed to get latest knowledge",
@@ -997,7 +1000,6 @@ app.post("/api/login", async (req, res) => {
     });
   } catch (error) {
     console.error("Failed to login:", error);
-
     res.status(500).json({
       success: false,
       message: "Failed to login",
@@ -1042,8 +1044,8 @@ app.post("/api/register", async (req, res) => {
 
     const [result] = await pool.query(
       `
-  INSERT INTO \`user\`
-      (username, email, password_hash, membership_level, is_verified, status, customer_id)
+      INSERT INTO \`user\`
+        (username, email, password_hash, membership_level, is_verified, status, customer_id)
       OUTPUT INSERTED.user_id AS insertId
       VALUES (?, ?, ?, 'FREE', 1, 'ACTIVE', ?)
       `,
@@ -1065,7 +1067,6 @@ app.post("/api/register", async (req, res) => {
     });
   } catch (error) {
     console.error("Failed to register:", error);
-
     res.status(500).json({
       success: false,
       message: "Failed to register",
@@ -1119,9 +1120,9 @@ app.post("/api/google-login", async (req, res) => {
     const customerId = "GOOGLE" + Date.now();
 
     const [result] = await pool.query(
-  "INSERT INTO user (username, email, password_hash, membership_level, is_verified, status, customer_id) OUTPUT INSERTED.user_id AS insertId VALUES (?, ?, ?, 'FREE', 1, 'ACTIVE', ?)",
-  [username || email.split("@")[0], email, googleId || "GOOGLE_LOGIN", customerId]
-);
+      "INSERT INTO user (username, email, password_hash, membership_level, is_verified, status, customer_id) OUTPUT INSERTED.user_id AS insertId VALUES (?, ?, ?, 'FREE', 1, 'ACTIVE', ?)",
+      [username || email.split("@")[0], email, googleId || "GOOGLE_LOGIN", customerId]
+    );
 
     res.status(201).json({
       success: true,
@@ -1138,7 +1139,6 @@ app.post("/api/google-login", async (req, res) => {
     });
   } catch (error) {
     console.error("Failed to login with Google:", error);
-
     res.status(500).json({
       success: false,
       message: "Failed to login with Google",
@@ -1146,6 +1146,7 @@ app.post("/api/google-login", async (req, res) => {
     });
   }
 });
+
 app.get("/api/line-login", (req, res) => {
   const channelId = process.env.LINE_CHANNEL_ID;
   const redirectUri = process.env.LINE_REDIRECT_URI;
@@ -1157,8 +1158,35 @@ app.get("/api/line-login", (req, res) => {
     });
   }
 
-  const state =
-    "line_" + Date.now() + "_" + Math.random().toString(36).slice(2);
+  const rawFrontendUrl = String(
+    req.query.frontendUrl ||
+      req.query.frontend ||
+      req.query.returnTo ||
+      process.env.FRONTEND_URL ||
+      ""
+  ).trim();
+
+  const defaultFrontendUrl = process.env.FRONTEND_URL || "http://localhost:8082";
+
+  const isSafeFrontendUrl =
+    /^https?:\/\/localhost(:\d+)?$/i.test(rawFrontendUrl) ||
+    /^https?:\/\/127\.0\.0\.1(:\d+)?$/i.test(rawFrontendUrl) ||
+    /^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/i.test(rawFrontendUrl);
+
+  const frontendUrl = isSafeFrontendUrl ? rawFrontendUrl : defaultFrontendUrl;
+
+  const statePayload = Buffer.from(
+    JSON.stringify({
+      nonce: Date.now() + "_" + Math.random().toString(36).slice(2),
+      frontendUrl,
+    })
+  )
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+
+  const state = "line_" + statePayload;
 
   const params = new URLSearchParams({
     response_type: "code",
@@ -1174,7 +1202,30 @@ app.get("/api/line-login", (req, res) => {
 app.get("/api/line-login/callback", async (req, res) => {
   const code = String(req.query.code || "");
   const error = String(req.query.error || "");
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8082";
+  let frontendUrl = process.env.FRONTEND_URL || "http://localhost:8082";
+
+  try {
+    const state = String(req.query.state || "");
+
+    if (state.startsWith("line_")) {
+      const encodedState = state.slice(5).replace(/-/g, "+").replace(/_/g, "/");
+      const stateJson = Buffer.from(encodedState, "base64").toString("utf8");
+      const parsedState = JSON.parse(stateJson);
+
+      const stateFrontendUrl = String(parsedState.frontendUrl || "").trim();
+
+      const isSafeFrontendUrl =
+        /^https?:\/\/localhost(:\d+)?$/i.test(stateFrontendUrl) ||
+        /^https?:\/\/127\.0\.0\.1(:\d+)?$/i.test(stateFrontendUrl) ||
+        /^https?:\/\/192\.168\.\d+\.\d+(:\d+)?$/i.test(stateFrontendUrl);
+
+      if (isSafeFrontendUrl) {
+        frontendUrl = stateFrontendUrl;
+      }
+    }
+  } catch (stateError) {
+    console.log("Failed to parse LINE state:", stateError.message);
+  }
 
   const redirectToFrontend = (status, message) => {
     const target = new URL("/line-callback", frontendUrl);
@@ -1278,9 +1329,251 @@ app.get("/api/line-login/callback", async (req, res) => {
     );
   }
 });
+
+
+async function insertIntoExistingColumns(tableName, valueMap) {
+  const exists = await tableExists(tableName);
+
+  if (!exists) {
+    return {
+      success: false,
+      message: `${tableName} table does not exist`,
+    };
+  }
+
+  const existingColumns = await getTableColumns(tableName);
+
+  const entries = Object.entries(valueMap).filter(([column, value]) => {
+    return existingColumns.includes(column) && value !== undefined && value !== null;
+  });
+
+  if (entries.length === 0) {
+    return {
+      success: false,
+      message: `No matching columns found for ${tableName}`,
+      existingColumns,
+    };
+  }
+
+  const columnsSql = entries.map(([column]) => `\`${column}\``).join(", ");
+  const placeholdersSql = entries.map(() => "?").join(", ");
+  const params = entries.map(([, value]) => value);
+
+  const [result] = await pool.query(
+    `
+    INSERT INTO \`${tableName}\`
+      (${columnsSql})
+    VALUES
+      (${placeholdersSql})
+    `,
+    params
+  );
+
+  return {
+    success: true,
+    tableName,
+    affectedRows: result.affectedRows || 0,
+    insertedColumns: entries.map(([column]) => column),
+  };
+}
+
+app.post("/api/blacklist", async (req, res) => {
+  const lineId = String(
+    req.body.lineId ||
+      req.body.line_id ||
+      req.body.account ||
+      req.body.value ||
+      ""
+  ).trim();
+
+  const reason = String(
+    req.body.reason ||
+      req.body.description ||
+      "使用者手動加入黑名單"
+  ).trim();
+
+  if (lineId.length < 3) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid LINE ID",
+    });
+  }
+
+  try {
+    const now = new Date();
+
+    const result = await insertIntoExistingColumns("blacklist", {
+      line_id: lineId,
+      lineId: lineId,
+      line_account: lineId,
+      account: lineId,
+      keyword: lineId,
+      value: lineId,
+      fraud_value: lineId,
+      reason,
+      description: reason,
+      content: reason,
+      note: reason,
+      type: "LINE",
+      fraud_type: "LINE",
+      category: "LINE",
+      status: "ACTIVE",
+      level: "high",
+      score: 88,
+      source: "user_blacklist",
+      created_at: now,
+      updated_at: now,
+    });
+
+    if (!result.success) {
+      return res.status(500).json(result);
+    }
+
+    return res.json({
+      success: true,
+      message: "已加入黑名單",
+      lineId,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Failed to add blacklist:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to add blacklist",
+      error: error.message,
+    });
+  }
+});
+
+
+async function handleLineReport(req, res) {
+  const lineId = String(
+    req.body.lineId ||
+      req.body.line_id ||
+      req.body.account ||
+      req.body.value ||
+      ""
+  ).trim();
+
+  const reason = String(
+    req.body.reason ||
+      req.body.description ||
+      "使用者通報 LINE ID"
+  ).trim();
+
+  if (lineId.length < 3) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid LINE ID",
+    });
+  }
+
+  try {
+    const now = new Date();
+
+    const reportValueMap = {
+      user_id: req.body.userId || req.body.user_id || 1,
+      line_id: lineId,
+      lineId: lineId,
+      line_account: lineId,
+      account: lineId,
+      keyword: lineId,
+      value: lineId,
+      fraud_value: lineId,
+      report_value: lineId,
+      reason,
+      description: reason,
+      content: reason,
+      note: reason,
+      type: "LINE",
+      report_type: "LINE",
+      fraud_type: "LINE",
+      category: "LINE",
+      status: "PENDING",
+      level: "high",
+      score: 88,
+      source: "user_report",
+      created_at: now,
+      updated_at: now,
+      report_time: now,
+      reported_at: now,
+    };
+
+    if (await tableExists("report")) {
+      const reportResult = await insertIntoExistingColumns("report", reportValueMap);
+
+      if (reportResult.success) {
+        return res.json({
+          success: true,
+          message: "通報成功",
+          lineId,
+          sourceTable: "report",
+          data: reportResult,
+        });
+      }
+
+      console.log("report 表無法寫入，改寫 blacklist:", reportResult);
+    }
+
+    const blacklistResult = await insertIntoExistingColumns("blacklist", {
+      line_id: lineId,
+      lineId: lineId,
+      line_account: lineId,
+      account: lineId,
+      keyword: lineId,
+      value: lineId,
+      fraud_value: lineId,
+      reason: "使用者通報：" + reason,
+      description: "使用者通報：" + reason,
+      content: "使用者通報：" + reason,
+      note: "使用者通報：" + reason,
+      type: "LINE_REPORT",
+      fraud_type: "LINE",
+      category: "LINE",
+      status: "PENDING",
+      level: "high",
+      score: 88,
+      source: "user_report",
+      created_at: now,
+      updated_at: now,
+    });
+
+    if (!blacklistResult.success) {
+      return res.status(500).json(blacklistResult);
+    }
+
+    return res.json({
+      success: true,
+      message: "通報成功",
+      lineId,
+      sourceTable: "blacklist",
+      data: blacklistResult,
+    });
+  } catch (error) {
+    console.error("Failed to report LINE ID:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to report LINE ID",
+      error: error.message,
+    });
+  }
+}
+
+app.post("/api/report-line", handleLineReport);
+app.post("/api/report", handleLineReport);
+module.exports = {
+  app,
+  pool,
+  sql,
+  getSqlPool,
+};
+
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-  console.log(`AI Shield Server Running: http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`AI Shield Server Running: http://0.0.0.0:${PORT}`);
 });
+
+
+
 

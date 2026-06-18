@@ -72,3 +72,4 @@ export const saveProfileAvatar = async (avatarUri: string) => {
   const savedProfile = await getSavedProfile();
   await saveProfile({ ...savedProfile, avatarUri });
 };
+

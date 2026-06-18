@@ -20,10 +20,27 @@ type AnalysisResult = {
   message: string;
   status: string;
   reason: string;
-  matchedKeywords: string[];
+  matchedKeywords: any[];
   isScam: boolean;
 };
 
+
+const formatMatchedKeywords = (keywords: any[]) => {
+  if (!Array.isArray(keywords)) {
+    return "";
+  }
+
+  return keywords
+    .map((item) => {
+      if (typeof item === "string") {
+        return item;
+      }
+
+      return item?.keyword || item?.reason || "";
+    })
+    .filter(Boolean)
+    .join("、");
+};
 const riskStyleMap: Record<
   RiskLevel,
   {
@@ -70,7 +87,7 @@ export default function MessageQueryScreen() {
     try {
       setLoading(true);
 
-      const res = await fetch("http://localhost:3000/api/analyze-message", {
+      const res = await fetch("http://192.168.18.12:3000/api/analyze-message", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -222,7 +239,7 @@ export default function MessageQueryScreen() {
                 <>
                   <Text style={styles.infoTitle}>命中關鍵字</Text>
                   <Text style={styles.infoText}>
-                    {result.matchedKeywords.join("、")}
+                    {formatMatchedKeywords(result.matchedKeywords)}
                   </Text>
                 </>
               )}
@@ -464,3 +481,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 });
+
+
+
