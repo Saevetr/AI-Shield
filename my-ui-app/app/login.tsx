@@ -6,28 +6,37 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
+  Linking,
+  Alert,
   Modal,
   ScrollView,
-  Alert,
 } from "react-native";
 
 import { router } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
-import * as LinkingAPI from "expo-linking";
 
 import {
+  GoogleAuthProvider,
   sendPasswordResetEmail,
+  signInWithRedirect,
+  getRedirectResult,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/app/config/firebase";
 import { setLogin } from "@/utils/auth";
 
-WebBrowser.maybeCompleteAuthSession();
-
-// 從環境變數讀取後端網址，如果讀不到就預設走 localhost
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
-
 export default function Login() {
+  const API_URL = "http://192.168.18.12:3000";
+  const getCurrentFrontendUrl = () => {
+    const globalObject = globalThis as any;
+
+    return (
+      globalObject?.location?.origin ||
+      process.env.EXPO_PUBLIC_FRONTEND_URL ||
+      "http://localhost:8082"
+    );
+  };
+
+
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [email, setEmail] = useState("");
@@ -36,30 +45,95 @@ export default function Login() {
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [isResetLoading, setIsResetLoading] = useState(false);
 
-  // 監聽外部跳轉
+
+
+
+  const finishGoogleLogin = async (firebaseUser: any) => {
+    console.log("GOOGLE FIREBASE USER:", firebaseUser.email);
+
+    const res = await fetch(`${API_URL}/api/google-login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: firebaseUser.email,
+        username:
+          firebaseUser.displayName ||
+          firebaseUser.email?.split("@")[0] ||
+          "google_user",
+        displayName: firebaseUser.displayName,
+        googleId: firebaseUser.uid,
+        uid: firebaseUser.uid,
+      }),
+    });
+
+    const rawText = await res.text();
+
+    let data: any = {};
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      data = {};
+    }
+
+    console.log("GOOGLE BACKEND RESULT:", data || rawText);
+
+    if (!res.ok || data.success === false) {
+      throw new Error(data.message || `HTTP ${res.status}`);
+    }
+
+    await setLogin(true);
+
+    const globalObject = globalThis as any;
+
+    if (globalObject.localStorage) {
+      globalObject.localStorage.setItem("isLogin", "true");
+      globalObject.localStorage.setItem("user", JSON.stringify(data.data || {}));
+    }
+
+    router.replace("/(tabs)");
+  };
+
   useEffect(() => {
-    const handleDeepLink = async (event: { url: string }) => {
-      console.log("App 接收到跳轉訊號 (Deep Link URL):", event.url);
-      
-      const parsedData = LinkingAPI.parse(event.url);
-      if (parsedData.queryParams?.success === "true" || parsedData.queryParams?.token) {
-        await setLogin(true);
-        router.replace("/(tabs)");
+    const checkGoogleRedirect = async () => {
+      try {
+        const redirectResult = await getRedirectResult(auth);
+
+        if (redirectResult?.user) {
+          console.log("GOOGLE REDIRECT RESULT:", redirectResult.user.email);
+          await finishGoogleLogin(redirectResult.user);
+        }
+      } catch (error: any) {
+        console.log("Google redirect 登入錯誤：", error);
+        Alert.alert(
+          "Google 登入失敗",
+          `${error?.code || ""}\n${error?.message || error}`
+        );
       }
     };
 
-    const subscription = LinkingAPI.addEventListener("url", handleDeepLink);
-
-    LinkingAPI.getInitialURL().then((url) => {
-      if (url) handleDeepLink({ url });
-    });
-
-    return () => {
-      subscription.remove();
-    };
+    checkGoogleRedirect();
   }, []);
 
-  // 一般帳密登入
+  const handleGoogleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+
+      provider.setCustomParameters({
+        prompt: "select_account",
+      });
+
+      await signInWithRedirect(auth, provider);
+    } catch (error: any) {
+      console.log("Google redirect 錯誤：", error);
+
+      Alert.alert(
+        "Google 登入失敗",
+        `${error?.code || ""}\n${error?.message || error}`
+      );
+    }
+  };
   const handleLogin = async () => {
     const account = email.trim();
     const inputPassword = password.trim();
@@ -70,57 +144,72 @@ export default function Login() {
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/login`, {
+      const loginUrl = `${API_URL}/api/login`;
+
+      console.log("LOGIN URL:", loginUrl);
+      console.log("LOGIN ACCOUNT:", account);
+
+      const res = await fetch(loginUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           account,
+          email: account,
+          username: account,
           password: inputPassword,
         }),
       });
 
-      const result = await res.json();
+      const text = await res.text();
 
-      if (!res.ok || result.success !== true) {
-        throw new Error(result.message || "帳號或密碼錯誤");
+      console.log("LOGIN RAW RESPONSE:", text);
+
+      let result: any;
+
+      try {
+        result = JSON.parse(text);
+      } catch (parseError) {
+        console.log("JSON parse error:", parseError);
+        Alert.alert("登入失敗", "後端回傳格式不是 JSON");
+        return;
       }
 
-      await setLogin(true);
+      console.log("LOGIN RESULT:", result);
+
+      if (!res.ok || result.success !== true) {
+        Alert.alert("登入失敗", result.message || "帳號或密碼錯誤");
+        return;
+      }
+
+      try {
+        await setLogin(true);
+        console.log("setLogin success");
+      } catch (loginStateError) {
+        console.log("setLogin failed, continue anyway:", loginStateError);
+      }
+
+      try {
+        const storage = (globalThis as any).localStorage;
+
+        if (storage) {
+          storage.setItem("isLogin", "true");
+          storage.setItem("user", JSON.stringify(result.data));
+        }
+      } catch (storageError) {
+        console.log("localStorage failed:", storageError);
+      }
+
+      console.log("準備跳轉到 tabs");
       router.replace("/(tabs)");
     } catch (error) {
       console.log("登入錯誤：", error);
-      const message = error instanceof Error ? error.message : "無法連接到伺服器";
+
+      const message =
+        error instanceof Error ? error.message : "無法連接到伺服器";
+
       Alert.alert("登入失敗", message);
-    }
-  };
-
-  // Google 登入
-  const handleGoogleLogin = async () => {
-    try {
-      const redirectUri = LinkingAPI.createURL("login"); 
-      const authUrl = `${API_BASE_URL}/api/google-login?redirect_uri=${encodeURIComponent(redirectUri)}`;
-      
-      console.log("正在開啟 Google 驗證網頁：", authUrl);
-      await WebBrowser.openBrowserAsync(authUrl);
-    } catch (error) {
-      console.log("Google 登入失敗：", error);
-      Alert.alert("登入失敗", "無法啟動 Google 登入");
-    }
-  };
-
-  // LINE 登入
-  const handleLineLogin = async () => {
-    try {
-      const redirectUri = LinkingAPI.createURL("login");
-      const authUrl = `${API_BASE_URL}/api/line-login?redirect_uri=${encodeURIComponent(redirectUri)}`;
-      
-      console.log("正在開啟 LINE 驗證網頁：", authUrl);
-      await WebBrowser.openBrowserAsync(authUrl);
-    } catch (error) {
-      console.log("LINE 登入失敗：", error);
-      Alert.alert("登入失敗", "無法啟動 LINE 登入");
     }
   };
 
@@ -139,21 +228,39 @@ export default function Login() {
 
     try {
       setIsResetLoading(true);
+
       try {
         const registeredEmailDoc = await getDoc(
           doc(db, "registeredEmails", encodeURIComponent(targetEmail))
         );
+
         if (!registeredEmailDoc.exists()) {
           console.log("Reset email index not found:", targetEmail);
         }
       } catch (indexError: any) {
-        console.log("Reset email index read error:", indexError?.message);
+        console.log(
+          "Reset email index read error:",
+          indexError?.code,
+          indexError?.message
+        );
       }
 
       await sendPasswordResetEmail(auth, targetEmail);
       setShowForgotModal(false);
       Alert.alert("已寄出重設信", "請到信箱查看密碼重設連結");
     } catch (error: any) {
+      const errorCode = error?.code;
+
+      if (errorCode === "auth/invalid-email") {
+        Alert.alert("重設失敗", "電子郵件格式不正確");
+        return;
+      }
+
+      if (errorCode === "auth/user-not-found") {
+        Alert.alert("重設失敗", "找不到此電子郵件的帳號");
+        return;
+      }
+
       Alert.alert("重設失敗", "目前無法寄出重設信，請稍後再試");
     } finally {
       setIsResetLoading(false);
@@ -179,8 +286,7 @@ export default function Login() {
 
         <View style={styles.dividerRow}>
           <View style={styles.line} />
-          <Text style={styles.welcome}>歡迎回來！</Text>
-          <View style={styles.line} />
+<Text style={styles.welcome}>歡迎回來！</Text>          <View style={styles.line} />
         </View>
 
         <Text style={styles.subtitle}>請輸入您的帳號密碼登入</Text>
@@ -230,7 +336,7 @@ export default function Login() {
         <View style={styles.optionRow}>
           <TouchableOpacity onPress={() => setRememberMe(!rememberMe)}>
             <Text style={styles.remember}>
-              {rememberMe ? "⬤ 記住我" : "◯ 記住我"}
+              {rememberMe ? "⬤" : "◯"} 記住我
             </Text>
           </TouchableOpacity>
 
@@ -250,7 +356,10 @@ export default function Login() {
         </View>
 
         <View style={styles.socialRow}>
-          <TouchableOpacity style={styles.socialButton} onPress={handleGoogleLogin}>
+          <TouchableOpacity
+            style={styles.socialButton}
+            onPress={handleGoogleLogin}
+          >
             <Image
               source={require("@/assets/images/google.png")}
               style={styles.socialIcon}
@@ -258,7 +367,18 @@ export default function Login() {
             <Text style={styles.socialText}>Google</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.socialButton} onPress={handleLineLogin}>
+          <TouchableOpacity
+            style={styles.socialButton}
+            onPress={() => {
+              const frontendUrl = getCurrentFrontendUrl();
+
+              Linking.openURL(
+                `${API_URL}/api/line-login?frontendUrl=${encodeURIComponent(
+                  frontendUrl
+                )}`
+              );
+            }}
+          >
             <Image
               source={require("@/assets/images/line.png")}
               style={styles.socialIcon}
@@ -340,40 +460,295 @@ export default function Login() {
 }
 
 const styles = StyleSheet.create({
-  scrollContent: { flexGrow: 1, backgroundColor: "#eef5ff" },
-  container: { flex: 1, paddingHorizontal: 28, paddingTop: 48, paddingBottom: 40, backgroundColor: "#eef5ff" },
-  logoContainer: { alignItems: "center", justifyContent: "center", marginTop: 18, marginBottom: 10 },
-  logo: { width: 250, height: 160 },
-  dividerRow: { flexDirection: "row", alignItems: "center", marginVertical: 10 },
-  line: { flex: 1, height: 1, backgroundColor: "#d7e5f8" },
-  welcome: { marginHorizontal: 14, fontSize: 17, color: "#2f62b9", fontWeight: "800", letterSpacing: 2 },
-  subtitle: { textAlign: "center", color: "#6c86aa", marginBottom: 18, fontSize: 13 },
-  inputBox: { height: 48, borderWidth: 1, borderColor: "#dbe8f7", borderRadius: 11, backgroundColor: "#ffffff", flexDirection: "row", alignItems: "center", paddingHorizontal: 14, marginBottom: 12, zIndex: 2 },
-  input: { flex: 1, fontSize: 15, color: "#1f2937" },
-  optionRow: { flexDirection: "row", marginBottom: 14, justifyContent: "space-between" },
-  remember: { color: "#6c86aa", fontSize: 13 },
-  forgot: { color: "#397bf2", fontSize: 13, fontWeight: "700" },
-  loginButton: { height: 50, backgroundColor: "#397bf2", borderRadius: 11, justifyContent: "center", alignItems: "center", marginBottom: 16, zIndex: 2 },
-  loginText: { color: "#fff", fontSize: 21, fontWeight: "bold", letterSpacing: 4 },
-  orText: { marginHorizontal: 14, color: "#8a97a8", fontSize: 13 },
-  socialRow: { flexDirection: "row", gap: 14, marginVertical: 14 },
-  socialButton: { flex: 1, height: 50, backgroundColor: "#ffffff", borderWidth: 1, borderColor: "#e3edf9", borderRadius: 11, alignItems: "center", justifyContent: "center", flexDirection: "row" },
-  socialText: { fontSize: 15, color: "#1f2937", fontWeight: "700" },
-  registerButton: { height: 50, borderWidth: 1, borderColor: "#c9dcf5", borderRadius: 11, justifyContent: "center", alignItems: "center", backgroundColor: "#edf4ff", marginTop: 4, zIndex: 2 },
-  registerText: { fontSize: 18, color: "#2f62b9", fontWeight: "800" },
-  hexagonBg: { position: "absolute", left: 0, bottom: -50, width: 300, height: 300, opacity: 0.32, zIndex: 0 },
-  icon: { width: 22, height: 22, marginRight: 10, resizeMode: "contain" },
-  eyeImage: { width: 22, height: 22, tintColor: "#6c86aa" },
-  socialIcon: { width: 24, height: 24, marginRight: 8, resizeMode: "contain" },
-  registerContent: { flexDirection: "row", alignItems: "center" },
-  registerIcon: { width: 22, height: 22, marginRight: 10, resizeMode: "contain" },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(31, 41, 55, 0.32)", alignItems: "center", justifyContent: "center", paddingHorizontal: 28 },
-  modalCard: { width: "100%", borderRadius: 16, backgroundColor: "#f8fbff", paddingHorizontal: 20, paddingTop: 22, paddingBottom: 18 },
-  modalTitle: { color: "#1f2937", fontSize: 20, fontWeight: "700", textAlign: "center", marginBottom: 8 },
-  modalSubtitle: { color: "#6c86aa", fontSize: 13, textAlign: "center", marginBottom: 18 },
-  modalInputBox: { height: 48, borderWidth: 1, borderColor: "#dbe8f7", borderRadius: 11, backgroundColor: "#fff", flexDirection: "row", alignItems: "center", paddingHorizontal: 14, marginBottom: 14 },
-  modalConfirmButton: { height: 48, borderRadius: 11, backgroundColor: "#397bf2", alignItems: "center", justifyContent: "center", marginBottom: 10 },
-  modalConfirmText: { color: "#fff", fontSize: 17, fontWeight: "700", letterSpacing: 2 },
-  modalCancelButton: { height: 42, borderRadius: 11, borderWidth: 1, borderColor: "#c9dcf5", backgroundColor: "#ffffff", alignItems: "center", justifyContent: "center" },
-  modalCancelText: { color: "#2f62b9", fontSize: 15, fontWeight: "700" },
+  scrollContent: {
+    flexGrow: 1,
+    backgroundColor: "#eef5ff",
+  },
+  content: {
+    zIndex: 1,
+  },
+  container: {
+    flex: 1,
+    paddingHorizontal: 28,
+    paddingTop: 48,
+    paddingBottom: 40,
+    backgroundColor: "#eef5ff",
+  },
+  logoContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 18,
+    marginBottom: 10,
+  },
+  logo: {
+    width: 250,
+    height: 160,
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 10,
+  },
+  line: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#d7e5f8",
+  },
+  welcome: {
+    marginHorizontal: 14,
+    fontSize: 17,
+    color: "#2f62b9",
+    fontWeight: "800",
+    letterSpacing: 2,
+  },
+  subtitle: {
+    textAlign: "center",
+    color: "#6c86aa",
+    marginBottom: 18,
+    fontSize: 13,
+  },
+  inputBox: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: "#dbe8f7",
+    borderRadius: 11,
+    backgroundColor: "#ffffff",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    marginBottom: 12,
+    zIndex: 2,
+  },
+  inputIcon: {
+    fontSize: 19,
+    marginRight: 10,
+  },
+  input: {
+    flex: 1,
+    fontSize: 15,
+    color: "#1f2937",
+    outlineStyle: "none" as any,
+  },
+  eyeIcon: {
+    fontSize: 18,
+  },
+  optionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  remember: {
+    color: "#6c86aa",
+    fontSize: 13,
+  },
+  forgot: {
+    color: "#397bf2",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  loginButton: {
+    height: 50,
+    backgroundColor: "#397bf2",
+    borderRadius: 11,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+    zIndex: 2,
+  },
+  loginText: {
+    color: "#fff",
+    fontSize: 21,
+    fontWeight: "bold",
+    letterSpacing: 4,
+  },
+  orText: {
+    marginHorizontal: 14,
+    color: "#8a97a8",
+    fontSize: 13,
+  },
+  socialRow: {
+    flexDirection: "row",
+    gap: 14,
+    marginVertical: 14,
+  },
+  socialButton: {
+    flex: 1,
+    height: 50,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#e3edf9",
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+  google: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#111",
+    marginRight: 8,
+  },
+  lineIcon: {
+    backgroundColor: "#20c060",
+    color: "#fff",
+    fontWeight: "bold",
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    borderRadius: 13,
+    marginRight: 8,
+    fontSize: 10,
+  },
+  socialText: {
+    fontSize: 15,
+    color: "#1f2937",
+    fontWeight: "700",
+  },
+  registerButton: {
+    height: 50,
+    borderWidth: 1,
+    borderColor: "#c9dcf5",
+    borderRadius: 11,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#edf4ff",
+    opacity: 1,
+    marginTop: 4,
+    zIndex: 2,
+  },
+  registerText: {
+    fontSize: 18,
+    color: "#2f62b9",
+    fontWeight: "800",
+  },
+  hexagonBg: {
+    position: "absolute",
+    left: 0,
+    bottom: -50,
+    width: 300,
+    height: 300,
+    opacity: 0.32,
+    zIndex: 0,
+  },
+  patternText: {
+    color: "#8aa4c5",
+    fontSize: 30,
+    letterSpacing: 8,
+  },
+  icon: {
+    width: 22,
+    height: 22,
+    marginRight: 10,
+    resizeMode: "contain",
+  },
+  eyeImage: {
+    width: 22,
+    height: 22,
+    tintColor: "#6c86aa",
+  },
+  socialIcon: {
+    width: 24,
+    height: 24,
+    marginRight: 8,
+    resizeMode: "contain",
+  },
+  registerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  registerIcon: {
+    width: 22,
+    height: 22,
+    marginRight: 10,
+    resizeMode: "contain",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(31, 41, 55, 0.32)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+  },
+  modalCard: {
+    width: "100%",
+    borderRadius: 16,
+    backgroundColor: "#f8fbff",
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 18,
+  },
+  modalTitle: {
+    color: "#1f2937",
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    color: "#6c86aa",
+    fontSize: 13,
+    textAlign: "center",
+    marginBottom: 18,
+  },
+  modalInputBox: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: "#dbe8f7",
+    borderRadius: 11,
+    backgroundColor: "#fff",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    marginBottom: 14,
+  },
+  modalConfirmButton: {
+    height: 48,
+    borderRadius: 11,
+    backgroundColor: "#397bf2",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  modalConfirmText: {
+    color: "#fff",
+    fontSize: 17,
+    fontWeight: "700",
+    letterSpacing: 2,
+  },
+  modalBackButton: {
+    height: 42,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  modalBackText: {
+    color: "#6c86aa",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  modalCancelButton: {
+    height: 42,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#c9dcf5",
+    backgroundColor: "#ffffff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalCancelText: {
+    color: "#2f62b9",
+    fontSize: 15,
+    fontWeight: "700",
+  },
 });
+
+
+
+
+
+
+
+
+
+
+

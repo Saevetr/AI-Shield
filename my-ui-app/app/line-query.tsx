@@ -65,6 +65,9 @@ const riskStyleMap = {
   }
 >;
 
+const API_BASE =
+  process.env.EXPO_PUBLIC_API_URL || "http://192.168.18.12:3000";
+
 export default function LineQueryScreen() {
   const [lineId, setLineId] = useState("");
   const [records, setRecords] = useState<QueryRecord[]>([]);
@@ -85,7 +88,7 @@ export default function LineQueryScreen() {
     try {
       setLoading(true);
 
-      const backendUrl = `http://localhost:3000/api/check-line?lineId=${encodeURIComponent(
+      const backendUrl = `${API_BASE}/api/check-line?lineId=${encodeURIComponent(
         normalizedLineId
       )}`;
 
@@ -187,13 +190,111 @@ export default function LineQueryScreen() {
   };
 
   const handleBack = () => {
-    if (queryResult) {
+  
+  if (queryResult) {
       setQueryResult(null);
       return;
     }
 
     router.back();
   };
+  const showMessage = (title: string, message: string) => {
+    const globalObject = globalThis as any;
+
+    if (typeof globalObject.alert === "function") {
+      globalObject.alert(`${title}\n${message}`);
+      return;
+    }
+
+    Alert.alert(title, message);
+  };
+
+  const handleAddToBlacklist = async () => {
+    console.log("ADD BLACKLIST BUTTON CLICKED");
+
+    if (!queryResult) {
+      showMessage("加入失敗", "目前沒有 LINE 查詢結果。");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/blacklist`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          lineId: queryResult.lineId,
+          reason: queryResult.reason || "使用者手動加入黑名單",
+        }),
+      });
+
+      const rawText = await res.text();
+
+      let data: any = {};
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        data = {};
+      }
+
+      console.log("ADD BLACKLIST RESULT:", data || rawText);
+
+      if (!res.ok || data.success === false) {
+        throw new Error(data.message || `HTTP ${res.status}`);
+      }
+
+      showMessage("已加入黑名單", `${queryResult.lineId} 已加入黑名單。`);
+    } catch (error: any) {
+      console.log("加入黑名單失敗：", error);
+      showMessage("加入失敗", error?.message || "無法加入黑名單。");
+    }
+  };
+
+  const handleReportLine = async () => {
+    console.log("REPORT LINE BUTTON CLICKED");
+
+    if (!queryResult) {
+      showMessage("通報失敗", "目前沒有 LINE 查詢結果。");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/report-line`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          lineId: queryResult.lineId,
+          reason: queryResult.reason || "使用者通報 LINE ID",
+          userId: 5,
+        }),
+      });
+
+      const rawText = await res.text();
+
+      let data: any = {};
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        data = {};
+      }
+
+      console.log("REPORT LINE RESULT:", data || rawText);
+
+      if (!res.ok || data.success === false) {
+        throw new Error(data.message || `HTTP ${res.status}`);
+      }
+
+      showMessage("已送出通報", "感謝你的回報，我們會持續更新風險資料。");
+    } catch (error: any) {
+      console.log("通報失敗：", error);
+      showMessage("通報失敗", error?.message || "無法送出通報。");
+    }
+  };
+
+
 
   if (queryResult) {
     const riskStyle = riskStyleMap[queryResult.level];
@@ -294,9 +395,7 @@ export default function LineQueryScreen() {
           <View style={styles.actionBar}>
             <TouchableOpacity
               style={styles.secondaryAction}
-              onPress={() =>
-                Alert.alert("已加入黑名單", "此 LINE ID 已加入黑名單示意清單。")
-              }
+              onPress={handleAddToBlacklist}
               activeOpacity={0.82}
             >
               <Text style={styles.secondaryActionText}>加入黑名單</Text>
@@ -304,9 +403,7 @@ export default function LineQueryScreen() {
 
             <TouchableOpacity
               style={styles.reportAction}
-              onPress={() =>
-                Alert.alert("已送出通報", "感謝你的回報，我們會持續更新風險資料。")
-              }
+              onPress={handleReportLine}
               activeOpacity={0.82}
             >
               <Text style={styles.reportActionText}>我要通報</Text>
@@ -811,3 +908,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 });
+
+
+
+

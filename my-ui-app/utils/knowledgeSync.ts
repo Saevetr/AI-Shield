@@ -88,3 +88,4 @@ export const syncKnowledgeArticlesToFirestore = async (
 
   await metaBatch.commit();
 };
+

@@ -66,21 +66,53 @@ export default function PhoneQueryScreen() {
       return;
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
     try {
       setLoading(true);
 
-      const backendUrl = `http://localhost:3000/api/check-phone?phone=${normalizedPhone}`;
-      const res = await fetch(backendUrl);
+      const API_URL =
+        process.env.EXPO_PUBLIC_API_URL || "http://192.168.18.12:3000";
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+      const backendUrl = `${API_URL}/api/check-phone?phone=${encodeURIComponent(
+        normalizedPhone
+      )}`;
+
+      console.log("PHONE CHECK URL:", backendUrl);
+      console.log("PHONE CHECK PHONE:", normalizedPhone);
+
+      const res = await fetch(backendUrl, {
+        method: "GET",
+        signal: controller.signal,
+      });
+
+      const rawText = await res.text();
+
+      console.log("PHONE CHECK RAW RESPONSE:", rawText);
+
+      let data: any;
+
+      try {
+        data = JSON.parse(rawText);
+      } catch (parseError) {
+        console.log("電話查詢 JSON 解析失敗：", parseError);
+        Alert.alert("查詢失敗", "後端回傳格式不是 JSON");
+        return;
       }
 
-      const data = await res.json();
+      console.log("PHONE CHECK RESULT:", data);
+
+      if (!res.ok || data.success === false) {
+        Alert.alert("查詢失敗", data.message || "電話查詢失敗");
+        return;
+      }
 
       const isScam =
         data.isScam === true ||
         data.is_scam === true ||
+        data.isFraud === true ||
+        data.exists === true ||
         data.status === "scam" ||
         data.data?.isScam === true ||
         data.detail?.isScam === true;
@@ -116,10 +148,25 @@ export default function PhoneQueryScreen() {
         const filtered = prev.filter((item) => item.phone !== normalizedPhone);
         return [result, ...filtered].slice(0, 5);
       });
-    } catch (error) {
+    } catch (error: any) {
       console.log("電話查詢錯誤：", error);
-      Alert.alert("連線錯誤", "無法連接到伺服器，請確認後端已啟動。");
+
+      if (error?.name === "AbortError") {
+        Alert.alert(
+          "查詢逾時",
+          "後端超過 8 秒沒有回應，請確認 server 是否正常運作。"
+        );
+        return;
+      }
+
+      Alert.alert(
+        "連線錯誤",
+        `無法連接到伺服器，請確認後端已啟動。\n\n${String(
+          error?.message || error
+        )}`
+      );
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
@@ -139,7 +186,10 @@ export default function PhoneQueryScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
             <Ionicons name="chevron-back" size={24} color="#111827" />
           </TouchableOpacity>
 
@@ -176,7 +226,12 @@ export default function PhoneQueryScreen() {
         </View>
 
         {queryResult && currentStyle && (
-          <View style={[styles.resultCard, { backgroundColor: currentStyle.bg }]}>
+          <View
+            style={[
+              styles.resultCard,
+              { backgroundColor: currentStyle.bg },
+            ]}
+          >
             <View style={styles.resultHeader}>
               <Ionicons
                 name={currentStyle.icon}
@@ -185,7 +240,12 @@ export default function PhoneQueryScreen() {
               />
 
               <View style={styles.resultTitleBox}>
-                <Text style={[styles.resultTitle, { color: currentStyle.color }]}>
+                <Text
+                  style={[
+                    styles.resultTitle,
+                    { color: currentStyle.color },
+                  ]}
+                >
                   {currentStyle.title}
                 </Text>
                 <Text style={styles.resultPhone}>{queryResult.phone}</Text>
@@ -236,11 +296,18 @@ export default function PhoneQueryScreen() {
                     />
                     <View>
                       <Text style={styles.historyPhone}>{item.phone}</Text>
-                      <Text style={styles.historyCarrier}>{item.carrier}</Text>
+                      <Text style={styles.historyCarrier}>
+                        {item.carrier}
+                      </Text>
                     </View>
                   </View>
 
-                  <Text style={[styles.historyLevel, { color: itemStyle.color }]}>
+                  <Text
+                    style={[
+                      styles.historyLevel,
+                      { color: itemStyle.color },
+                    ]}
+                  >
                     {itemStyle.title}
                   </Text>
                 </TouchableOpacity>
