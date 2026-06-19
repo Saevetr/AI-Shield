@@ -79,7 +79,7 @@ export default function Register() {
       const API_URL =
         process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
 
-      const registerUrl = `${API_URL}/api/register`;
+      const registerUrl = `${API_URL}/api/auth/register`;
 
       console.log("REGISTER URL:", registerUrl);
       console.log("REGISTER BODY:", {
@@ -425,3 +425,4 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
 });
+

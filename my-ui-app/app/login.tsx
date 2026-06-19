@@ -25,7 +25,7 @@ import { auth, db } from "@/app/config/firebase";
 import { setLogin } from "@/utils/auth";
 
 export default function Login() {
-  const API_URL = "https://ai-shield-m68d.onrender.com";
+  const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
   const getCurrentFrontendUrl = () => {
     const globalObject = globalThis as any;
 
@@ -144,7 +144,7 @@ export default function Login() {
     }
 
     try {
-      const loginUrl = `${API_URL}/api/login`;
+      const loginUrl = `${API_URL}/api/auth/login`;
 
       console.log("LOGIN URL:", loginUrl);
       console.log("LOGIN ACCOUNT:", account);
@@ -741,6 +741,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+
 
 
 
