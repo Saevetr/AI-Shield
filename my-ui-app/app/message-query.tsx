@@ -87,7 +87,7 @@ export default function MessageQueryScreen() {
     try {
       setLoading(true);
 
-      const res = await fetch("http://192.168.18.12:3000/api/analyze-message", {
+      const res = await fetch("http://127.0.0.1:3000/api/analyze-message", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

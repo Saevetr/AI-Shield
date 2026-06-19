@@ -17,7 +17,7 @@ import {
   View,
 } from "react-native";
 
-const API_BASE = "http://192.168.18.12:3000";
+const API_BASE = "http://127.0.0.1:3000";
 
 const filterTabs = ["全部", "電話", "LINE ID"] as const;
 

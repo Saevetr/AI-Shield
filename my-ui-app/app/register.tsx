@@ -77,7 +77,7 @@ export default function Register() {
       setIsRegistering(true);
 
       const API_URL =
-        process.env.EXPO_PUBLIC_API_URL || "http://192.168.18.12:3000";
+        process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:3000";
 
       const registerUrl = `${API_URL}/api/register`;
 

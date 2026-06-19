@@ -66,7 +66,7 @@ const riskStyleMap = {
 >;
 
 const API_BASE =
-  process.env.EXPO_PUBLIC_API_URL || "http://192.168.18.12:3000";
+  process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:3000";
 
 export default function LineQueryScreen() {
   const [lineId, setLineId] = useState("");
