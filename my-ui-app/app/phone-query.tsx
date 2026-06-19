@@ -73,7 +73,7 @@ export default function PhoneQueryScreen() {
       setLoading(true);
 
       const API_URL =
-        process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:3000";
+        process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
 
       const backendUrl = `${API_URL}/api/check-phone?phone=${encodeURIComponent(
         normalizedPhone

@@ -25,7 +25,7 @@ import { auth, db } from "@/app/config/firebase";
 import { setLogin } from "@/utils/auth";
 
 export default function Login() {
-  const API_URL = "http://127.0.0.1:3000";
+  const API_URL = "https://ai-shield-m68d.onrender.com";
   const getCurrentFrontendUrl = () => {
     const globalObject = globalThis as any;
 
