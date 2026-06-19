@@ -47,6 +47,7 @@ app.post(
 
 // 6. 啟動 Node.js 伺服器
 const PORT = process.env.PORT || 3000;
+app.use("/api/home", homeRoutes);
 app.listen(PORT, () => {
   console.log(`=================================================`);
   console.log(` 🛡️  AI Shield 安全防護網後端伺服器已成功啟動`);

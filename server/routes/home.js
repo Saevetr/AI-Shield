@@ -1,37 +1,90 @@
-// home.js
 const express = require("express");
 const router = express.Router();
 const pool = require("./db");
 
-// 獲取所有防詐知識文章列表
+const getRows = async (sql) => {
+  const result = await pool.query(sql);
+
+  if (Array.isArray(result)) {
+    if (Array.isArray(result[0])) {
+      return result[0];
+    }
+
+    if (result[0]?.recordset) {
+      return result[0].recordset;
+    }
+  }
+
+  if (result?.recordset) {
+    return result.recordset;
+  }
+
+  return [];
+};
+
+const safeCount = async (sql, label) => {
+  try {
+    const rows = await getRows(sql);
+    return Number(rows?.[0]?.count || rows?.[0]?.COUNT || 0);
+  } catch (error) {
+    console.log(`[home stats] ${label} failed:`, error.message);
+    return 0;
+  }
+};
+
+const homeStatsHandler = async (req, res) => {
+  const fraudDatabaseCount = await safeCount(
+    "SELECT COUNT(*) AS count FROM fraud_database",
+    "fraud_database"
+  );
+
+  const blacklistCount = await safeCount(
+    "SELECT COUNT(*) AS count FROM blacklist",
+    "blacklist"
+  );
+
+  const reportCount = await safeCount(
+    "SELECT COUNT(*) AS count FROM report",
+    "report"
+  );
+
+  res.json({
+    success: true,
+    data: {
+      fraudDatabaseCount,
+      blacklistCount,
+      reportCount,
+      totalScam: fraudDatabaseCount,
+      todayReport: 0,
+    },
+    fraudDatabaseCount,
+    blacklistCount,
+    reportCount,
+    totalScam: fraudDatabaseCount,
+    todayReport: 0,
+  });
+};
+
+router.get("/summary", homeStatsHandler);
+router.get("/home/stats", homeStatsHandler);
+
 router.get("/anti-fraud-knowledge", async (req, res) => {
   try {
-    const [rows] = await pool.query(
+    const rows = await getRows(
       "SELECT knowledge_id, title, content, category, source, view_count, created_at FROM anti_fraud_knowledge ORDER BY created_at DESC"
     );
-    res.json({ success: true, data: rows });
-  } catch (error) {
-    console.error("Failed to query knowledge:", error);
-    res.status(500).json({ success: false, message: "無法獲取防詐知識庫" });
-  }
-});
-
-// 首頁看板數據統計
-router.get("/home/stats", async (req, res) => {
-  try {
-    const [totalScam] = await pool.query("SELECT COUNT(*) as count FROM fraud_database");
-    const [todayReport] = await pool.query("SELECT COUNT(*) as count FROM blacklist WHERE TO_DAYS(created_at) = TO_DAYS(NOW())");
 
     res.json({
       success: true,
-      data: {
-        totalScamRecords: totalScam[0].count || 0,
-        todayReports: todayReport[0].count || 0,
-        systemStatus: "運行正常"
-      }
+      data: rows,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: "無法獲取首頁統計數據" });
+    console.log("[anti-fraud-knowledge] failed:", error.message);
+
+    res.json({
+      success: true,
+      data: [],
+    });
   }
 });
 
