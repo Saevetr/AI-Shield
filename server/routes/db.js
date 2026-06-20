@@ -8,7 +8,7 @@ const dbConfig = {
   database: process.env.DB_NAME || process.env.DB_DATABASE || process.env.DATABASE,
   options: {
     encrypt: true,
-    trustServerCertificate: false,
+    trustServerCertificate: true,
   },
   pool: {
     max: 10,
