@@ -1,9 +1,9 @@
-// home.js
+// routes/home.js
 const express = require("express");
 const router = express.Router();
-const pool = require("./db");
+const pool = require("./db"); // ⭐️ 確保引入同層的 db
 
-// 獲取所有防詐知識文章列表
+// 1. 獲取所有防詐知識文章
 router.get("/anti-fraud-knowledge", async (req, res) => {
   try {
     const [rows] = await pool.query(
@@ -11,12 +11,11 @@ router.get("/anti-fraud-knowledge", async (req, res) => {
     );
     res.json({ success: true, data: rows });
   } catch (error) {
-    console.error("Failed to query knowledge:", error);
-    res.status(500).json({ success: false, message: "無法獲取防詐知識庫" });
+    res.status(500).json({ success: false, message: "無法獲取防詐知識庫", error: error.message });
   }
 });
 
-// 首頁看板數據統計
+// 2. 首頁看板加總統計
 router.get("/home/stats", async (req, res) => {
   try {
     const [totalScam] = await pool.query("SELECT COUNT(*) as count FROM fraud_database");
@@ -27,11 +26,11 @@ router.get("/home/stats", async (req, res) => {
       data: {
         totalScamRecords: totalScam[0].count || 0,
         todayReports: todayReport[0].count || 0,
-        systemStatus: "運行正常"
+        systemStatus: "全時防護中"
       }
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: "無法獲取首頁統計數據" });
+    res.status(500).json({ success: false, message: "無法獲取統計數據" });
   }
 });
 
