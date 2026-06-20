@@ -30,6 +30,21 @@ app.get("/", (req, res) => {
   res.send("AI Shield Server Running Successfully!");
 });
 
+const healthResponse = (req, res) => {
+  const commit = process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || "local";
+
+  res.json({
+    success: true,
+    service: "ai-shield-backend",
+    status: "ok",
+    commit,
+    deployedAt: process.env.RENDER_DEPLOYMENT_ID || "unknown",
+  });
+};
+
+app.get("/api/health", healthResponse);
+app.get("/api/version", healthResponse);
+
 // 4. 💡 完美對接與分類掛載外部路由 (完全不重疊)
 app.use("/api/auth", authRoutes);   // 所有登入驗證路由 -> 變成 /api/auth/login 等
 app.use("/api/check", checkRoutes); // 所有安全性檢測路由 -> 變成 /api/check/check-phone 等

@@ -19,7 +19,9 @@ router.get("/anti-fraud-knowledge", async (req, res) => {
 router.get("/home/stats", async (req, res) => {
   try {
     const [totalScam] = await pool.query("SELECT COUNT(*) as count FROM fraud_database");
-    const [todayReport] = await pool.query("SELECT COUNT(*) as count FROM blacklist WHERE TO_DAYS(created_at) = TO_DAYS(NOW())");
+    const [todayReport] = await pool.query(
+      "SELECT COUNT(*) as count FROM blacklist WHERE CAST(created_at AS date) = CAST(GETDATE() AS date)"
+    );
 
     res.json({
       success: true,
@@ -30,6 +32,7 @@ router.get("/home/stats", async (req, res) => {
       }
     });
   } catch (error) {
+    console.error("Failed to load home stats:", error);
     res.status(500).json({ success: false, message: "無法獲取統計數據" });
   }
 });
