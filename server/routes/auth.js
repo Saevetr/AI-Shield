@@ -72,4 +72,37 @@ router.post("/register", async (req, res) => {
   }
 });
 
+// =========================================================================
+// 🚀 3. 同步重設後的密碼到 MySQL (Sync Password)
+// =========================================================================
+router.post("/sync-password", async (req, res) => {
+  const email = String(req.body.email || "").trim().toLowerCase();
+  const newPassword = String(req.body.newPassword || "").trim();
+
+  if (!email || !newPassword) {
+    return res.status(400).json({ success: false, message: "資料不完整" });
+  }
+
+  try {
+    // 檢查該使用者是否存在
+    const [users] = await pool.query("SELECT user_id FROM user WHERE email = ? LIMIT 1", [email]);
+    
+    if (users.length === 0) {
+      return res.status(444).json({ success: false, message: "找不到該電子郵件對應的使用者" });
+    }
+
+    // 更新密碼（如果你的系統有處理雜湊加密如 bcrypt，請記得在此處將 newPassword 加密後再存入，如果原本就是明文則直接存入）
+    // 這裡示範直接更新對齊你之前的資料庫架構：
+    await pool.query(
+      "UPDATE user SET password_hash = ? WHERE email = ?",
+      [newPassword, email]
+    );
+
+    return res.json({ success: true, message: "資料庫密碼已成功同步更新！" });
+  } catch (error) {
+    console.error("Sync password error:", error);
+    return res.status(500).json({ success: false, message: "伺服器內部錯誤，密碼同步失敗" });
+  }
+});
+
 module.exports = router;

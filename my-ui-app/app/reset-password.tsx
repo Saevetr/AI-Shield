@@ -75,10 +75,41 @@ export default function ResetPasswordScreen() {
 
     try {
       setIsSubmitting(true);
+
+      // 1. 先讓 Firebase 雲端更新密碼
       await confirmPasswordReset(auth, oobCode, newPassword);
+
+      // 2. ⭐️ 同步通知你的 Render 後端更新 MySQL 資料庫中的密碼
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
+      const syncRes = await fetch(`${API_URL}/api/auth/sync-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email,       // 透過 Firebase 驗證拿到的真實 Email
+          newPassword: newPassword, // 使用者設定的新密碼
+        }),
+      });
+
+      let syncResult: any;
+      try {
+        const rawText = await syncRes.text();
+        syncResult = JSON.parse(rawText);
+      } catch (e) {
+        throw new Error("後端資料庫密碼同步失敗，回傳格式錯誤");
+      }
+
+      if (!syncRes.ok || syncResult.success !== true) {
+        throw new Error(syncResult.message || "資料庫密碼同步失敗");
+      }
+
+      // 3. 雙邊（Firebase + MySQL）都更新成功，顯示成功畫面
       setIsDone(true);
-    } catch {
-      Alert.alert("重設失敗", "重設連結已失效，請重新寄送密碼重設信");
+    } catch (error) {
+      console.log("重設密碼出錯:", error);
+      const errorText = error instanceof Error ? error.message : "重設連結已失效，請重新寄送密碼重設信";
+      Alert.alert("重設失敗", errorText);
     } finally {
       setIsSubmitting(false);
     }
@@ -408,4 +439,3 @@ const styles = StyleSheet.create({
     zIndex: 0,
   },
 });
-
