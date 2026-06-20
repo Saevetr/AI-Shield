@@ -35,6 +35,10 @@ app.use("/api/auth", authRoutes);   // 所有登入驗證路由 -> 變成 /api/a
 app.use("/api/check", checkRoutes); // 所有安全性檢測路由 -> 變成 /api/check/check-phone 等
 app.use("/api/info", homeRoutes);   // 所有首頁與知識庫數據 -> 變成 /api/info/anti-fraud-knowledge 等
 
+// 相容已部署的舊版前端與第三方 OAuth callback。
+app.use("/api", authRoutes);
+app.use("/api", checkRoutes);
+
 // 5. 多模態 AI 防詐分析核心路由 (搭配 Multer 解析器)
 app.post(
   "/api/analyze-scam",

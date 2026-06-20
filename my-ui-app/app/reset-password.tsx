@@ -96,7 +96,7 @@ export default function ResetPasswordScreen() {
       try {
         const rawText = await syncRes.text();
         syncResult = JSON.parse(rawText);
-      } catch (e) {
+      } catch {
         throw new Error("後端資料庫密碼同步失敗，回傳格式錯誤");
       }
 

@@ -17,7 +17,8 @@ import {
   View,
 } from "react-native";
 
-const API_BASE = "http://127.0.0.1:3000";
+const API_BASE =
+  process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
 
 const filterTabs = ["全部", "電話", "LINE ID"] as const;
 
@@ -89,8 +90,8 @@ export default function BlacklistScreen() {
 
       const url =
         activeTab === "全部"
-          ? `${API_BASE}/api/blacklist`
-          : `${API_BASE}/api/blacklist?type=${encodeURIComponent(activeTab)}`;
+          ? `${API_BASE}/api/check/blacklist`
+          : `${API_BASE}/api/check/blacklist?type=${encodeURIComponent(activeTab)}`;
 
       const res = await fetch(url);
 
@@ -146,7 +147,7 @@ export default function BlacklistScreen() {
     try {
       setSaving(true);
 
-      const res = await fetch(`${API_BASE}/api/blacklist`, {
+      const res = await fetch(`${API_BASE}/api/check/blacklist`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -178,7 +179,7 @@ export default function BlacklistScreen() {
 
   const handleRemove = async (item: BlacklistItem) => {
     try {
-      const res = await fetch(`${API_BASE}/api/blacklist/${item.id}`, {
+      const res = await fetch(`${API_BASE}/api/check/blacklist/${item.id}`, {
         method: "DELETE",
       });
 

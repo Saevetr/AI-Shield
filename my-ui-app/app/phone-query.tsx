@@ -75,15 +75,17 @@ export default function PhoneQueryScreen() {
       const API_URL =
         process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
 
-      const backendUrl = `${API_URL}/api/check-phone?phone=${encodeURIComponent(
-        normalizedPhone
-      )}`;
+      const backendUrl = `${API_URL}/api/check/check-phone`;
 
       console.log("PHONE CHECK URL:", backendUrl);
       console.log("PHONE CHECK PHONE:", normalizedPhone);
 
       const res = await fetch(backendUrl, {
-        method: "GET",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ phone: normalizedPhone }),
         signal: controller.signal,
       });
 

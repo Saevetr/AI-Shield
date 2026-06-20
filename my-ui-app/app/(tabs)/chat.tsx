@@ -26,8 +26,9 @@ type ChatMessage = {
   uri?: string;
 };
 
-// ⭐️ 記得將此 IP 修改為你 Node.js 後端伺服器運行的真實區域網路 IP (實機與模擬器不能寫 localhost)
-const BACKEND_URL = "https://ai-shield-m68d.onrender.com/api/analyze-scam";
+const API_URL =
+  process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
+const BACKEND_URL = `${API_URL}/api/analyze-scam`;
 
 export default function ChatScreen() {
   const [message, setMessage] = useState("");

@@ -88,11 +88,15 @@ export default function LineQueryScreen() {
     try {
       setLoading(true);
 
-      const backendUrl = `${API_BASE}/api/check-line?lineId=${encodeURIComponent(
-        normalizedLineId
-      )}`;
+      const backendUrl = `${API_BASE}/api/check/check-line`;
 
-      const res = await fetch(backendUrl);
+      const res = await fetch(backendUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ lineId: normalizedLineId }),
+      });
 
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
@@ -218,7 +222,7 @@ export default function LineQueryScreen() {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/blacklist`, {
+      const res = await fetch(`${API_BASE}/api/check/blacklist`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -260,7 +264,7 @@ export default function LineQueryScreen() {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/report-line`, {
+      const res = await fetch(`${API_BASE}/api/check/report-line`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

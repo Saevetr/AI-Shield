@@ -87,7 +87,10 @@ export default function MessageQueryScreen() {
     try {
       setLoading(true);
 
-      const res = await fetch("http://127.0.0.1:3000/api/analyze-message", {
+      const API_URL =
+        process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
+
+      const res = await fetch(`${API_URL}/api/check/analyze-message`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

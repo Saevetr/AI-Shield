@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Linking,
   Alert,
   Modal,
+  Platform,
   ScrollView,
 } from "react-native";
 
@@ -17,6 +18,7 @@ import { router } from "expo-router";
 import {
   GoogleAuthProvider,
   sendPasswordResetEmail,
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
 } from "firebase/auth";
@@ -48,23 +50,17 @@ export default function Login() {
 
 
 
-  const finishGoogleLogin = async (firebaseUser: any) => {
+  const finishGoogleLogin = useCallback(async (firebaseUser: any) => {
     console.log("GOOGLE FIREBASE USER:", firebaseUser.email);
+    const idToken = await firebaseUser.getIdToken(true);
 
-    const res = await fetch(`${API_URL}/api/google-login`, {
+    const res = await fetch(`${API_URL}/api/auth/google-login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        email: firebaseUser.email,
-        username:
-          firebaseUser.displayName ||
-          firebaseUser.email?.split("@")[0] ||
-          "google_user",
-        displayName: firebaseUser.displayName,
-        googleId: firebaseUser.uid,
-        uid: firebaseUser.uid,
+        idToken,
       }),
     });
 
@@ -93,7 +89,7 @@ export default function Login() {
     }
 
     router.replace("/(tabs)");
-  };
+  }, [API_URL]);
 
   useEffect(() => {
     const checkGoogleRedirect = async () => {
@@ -114,7 +110,7 @@ export default function Login() {
     };
 
     checkGoogleRedirect();
-  }, []);
+  }, [finishGoogleLogin]);
 
   const handleGoogleLogin = async () => {
     try {
@@ -123,6 +119,12 @@ export default function Login() {
       provider.setCustomParameters({
         prompt: "select_account",
       });
+
+      if (Platform.OS === "web") {
+        const result = await signInWithPopup(auth, provider);
+        await finishGoogleLogin(result.user);
+        return;
+      }
 
       await signInWithRedirect(auth, provider);
     } catch (error: any) {
@@ -373,7 +375,7 @@ export default function Login() {
               const frontendUrl = getCurrentFrontendUrl();
 
               Linking.openURL(
-                `${API_URL}/api/line-login?frontendUrl=${encodeURIComponent(
+                `${API_URL}/api/auth/line-login?frontendUrl=${encodeURIComponent(
                   frontendUrl
                 )}`
               );
