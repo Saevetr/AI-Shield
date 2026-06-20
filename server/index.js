@@ -32,7 +32,6 @@ app.get("/", (req, res) => {
 
 // 4. 💡 完美對接與分類掛載外部路由 (完全不重疊)
 app.use("/api/auth", authRoutes);   // 所有登入驗證路由 -> 變成 /api/auth/login 等
-app.use("/api", authRoutes);
 app.use("/api/check", checkRoutes); // 所有安全性檢測路由 -> 變成 /api/check/check-phone 等
 app.use("/api/info", homeRoutes);   // 所有首頁與知識庫數據 -> 變成 /api/info/anti-fraud-knowledge 等
 
