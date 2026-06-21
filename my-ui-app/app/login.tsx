@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -20,32 +20,12 @@ import {
   GoogleAuthProvider,
   sendPasswordResetEmail,
   signInWithPopup,
-  signInWithCredential, // ✨ 新增：手機端將 token 換成 Firebase 憑證用
 } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "@/app/config/firebase";
+import { auth } from "@/app/config/firebase";
 import { setLogin } from "@/utils/auth";
-
-// ✨ 新增：手機端 Google 登入必備
-import * as AuthSession from "expo-auth-session";
-import * as WebBrowser from "expo-web-browser";
-import * as Google from "expo-auth-session/providers/google";
-
-// 讓手機網頁彈窗登入後能正確關閉並跳回 App
-WebBrowser.maybeCompleteAuthSession();
 
 export default function Login() {
   const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
-  
-  // ✨ 新增：設定手機端 Expo Auth Session (請替換成你在 Firebase Console 申請的 Web Client ID)
-  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
-    webClientId: "683703711119-d5pbt7hsohdhrueh3p3tt0j8i82vm099.apps.googleusercontent.com",
-    iosClientId: "683703711119-d5pbt7hsohdhrueh3p3tt0j8i82vm099.apps.googleusercontent.com",
-
-    redirectUri: AuthSession.makeRedirectUri({
-    scheme: "myuiapp", // 可以去 app.json 裡的 "scheme" 查看，通常是你的 app 名稱
-  }),
-  });
 
   const getCurrentFrontendUrl = () => {
     const globalObject = globalThis as any;
@@ -63,9 +43,9 @@ export default function Login() {
   const [resetEmail, setResetEmail] = useState("");
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [isResetLoading, setIsResetLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const finishGoogleLogin = useCallback(async (firebaseUser: any) => {
-    console.log("GOOGLE FIREBASE USER:", firebaseUser.email);
     const idToken = await firebaseUser.getIdToken(true);
 
     const res = await fetch(`${API_URL}/api/auth/google-login`, {
@@ -79,8 +59,6 @@ export default function Login() {
     const rawText = await res.text();
     let data: any = {};
     try { data = JSON.parse(rawText); } catch { data = {}; }
-
-    console.log("GOOGLE BACKEND RESULT:", data || rawText);
 
     if (!res.ok || data.success === false) {
       throw new Error(data.message || `HTTP ${res.status}`);
@@ -96,43 +74,31 @@ export default function Login() {
     router.replace("/(tabs)");
   }, [API_URL]);
 
-  // ✨ 修正：監聽手機端 Google 登入回傳的 Token 狀態
-  useEffect(() => {
-    if (response?.type === "success" && response.params?.id_token) {
-      const { id_token } = response.params;
-
-      // 使用 idToken 登入 Firebase，成功後會自動觸發 Firebase 狀態更新
-      const credential = GoogleAuthProvider.credential(id_token);
-      signInWithCredential(auth, credential)
-        .then((result) => {
-          finishGoogleLogin(result.user);
-        })
-        .catch((error) => {
-          console.log("手機端 Firebase 憑證登入失敗：", error);
-          Alert.alert("Google 登入失敗", "無法同步身分至 Firebase");
-        });
-    }
-  }, [response, finishGoogleLogin]);
-
-  // ✨ 修正：點擊 Google 登入按鈕的處理邏輯
   const handleGoogleLogin = async () => {
+    if (Platform.OS !== "web") {
+      Alert.alert(
+        "Google 登入尚未設定",
+        "目前 Firebase 只有網頁版設定，請先使用公開網站登入。"
+      );
+      return;
+    }
+
     try {
-      if (Platform.OS === "web") {
-        // Web 端繼續保持漂亮的 Popup 登入
-        const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: "select_account" });
-        const result = await signInWithPopup(auth, provider);
-        await finishGoogleLogin(result.user);
-      } else {
-        // 📱 手機端：呼叫 Expo WebBrowser 彈窗進行 Google 認證
-        promptAsync();
-      }
+      setIsGoogleLoading(true);
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const result = await signInWithPopup(auth, provider);
+      await finishGoogleLogin(result.user);
     } catch (error: any) {
       console.log("Google 登入錯誤：", error);
-      Alert.alert(
-        "Google 登入失敗",
-        `${error?.code || ""}\n${error?.message || error}`
-      );
+      const messages: Record<string, string> = {
+        "auth/popup-blocked": "瀏覽器阻擋了登入視窗，請允許彈出式視窗後重試。",
+        "auth/popup-closed-by-user": "Google 登入視窗已關閉。",
+        "auth/unauthorized-domain": "目前網站尚未加入 Firebase 授權網域。",
+      };
+      Alert.alert("Google 登入失敗", messages[error?.code] || error?.message || "請稍後再試");
+    } finally {
+      setIsGoogleLoading(false);
     }
   };
 
@@ -160,7 +126,7 @@ export default function Login() {
 
       const text = await res.text();
       let result: any;
-      try { result = JSON.parse(text); } catch (parseError) {
+      try { result = JSON.parse(text); } catch {
         Alert.alert("登入失敗", "後端回傳格式不是 JSON");
         return;
       }
@@ -301,14 +267,20 @@ export default function Login() {
 
         <View style={styles.socialRow}>
           <TouchableOpacity
-            style={styles.socialButton}
+            style={[
+              styles.socialButton,
+              isGoogleLoading && styles.socialButtonDisabled,
+            ]}
             onPress={handleGoogleLogin}
+            disabled={isGoogleLoading}
           >
             <Image
               source={require("@/assets/images/google.png")}
               style={styles.socialIcon}
             />
-            <Text style={styles.socialText}>Google</Text>
+            <Text style={styles.socialText}>
+              {isGoogleLoading ? "登入中" : "Google"}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -525,6 +497,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
+  },
+  socialButtonDisabled: {
+    opacity: 0.6,
   },
   google: {
     fontSize: 24,
