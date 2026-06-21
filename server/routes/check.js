@@ -291,7 +291,11 @@ router.get("/blacklist", async (req, res) => {
     const requestedType = String(req.query.type || "");
     const items = rows
       .map(mapBlacklistItem)
-      .filter((item) => !requestedType || item.type === requestedType);
+      .filter(
+        (item) =>
+          item.value.trim().length > 0 &&
+          (!requestedType || item.type === requestedType)
+      );
 
     return res.json({ success: true, items, data: items });
   } catch (error) {
