@@ -15,29 +15,46 @@ import {
 
 import { router } from "expo-router";
 
+
 import {
   GoogleAuthProvider,
   sendPasswordResetEmail,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithCredential, // ✨ 新增：手機端將 token 換成 Firebase 憑證用
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/app/config/firebase";
 import { setLogin } from "@/utils/auth";
 
+// ✨ 新增：手機端 Google 登入必備
+import * as AuthSession from "expo-auth-session";
+import * as WebBrowser from "expo-web-browser";
+import * as Google from "expo-auth-session/providers/google";
+
+// 讓手機網頁彈窗登入後能正確關閉並跳回 App
+WebBrowser.maybeCompleteAuthSession();
+
 export default function Login() {
   const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
+  
+  // ✨ 新增：設定手機端 Expo Auth Session (請替換成你在 Firebase Console 申請的 Web Client ID)
+  const [request, response, promptAsync] = Google.useIdTokenAuthRequest({
+    webClientId: "683703711119-d5pbt7hsohdhrueh3p3tt0j8i82vm099.apps.googleusercontent.com",
+    iosClientId: "683703711119-d5pbt7hsohdhrueh3p3tt0j8i82vm099.apps.googleusercontent.com",
+
+    redirectUri: AuthSession.makeRedirectUri({
+    scheme: "myuiapp", // 可以去 app.json 裡的 "scheme" 查看，通常是你的 app 名稱
+  }),
+  });
+
   const getCurrentFrontendUrl = () => {
     const globalObject = globalThis as any;
-
     return (
       globalObject?.location?.origin ||
       process.env.EXPO_PUBLIC_FRONTEND_URL ||
       "http://localhost:8082"
     );
   };
-
 
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -46,9 +63,6 @@ export default function Login() {
   const [resetEmail, setResetEmail] = useState("");
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [isResetLoading, setIsResetLoading] = useState(false);
-
-
-
 
   const finishGoogleLogin = useCallback(async (firebaseUser: any) => {
     console.log("GOOGLE FIREBASE USER:", firebaseUser.email);
@@ -59,19 +73,12 @@ export default function Login() {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        idToken,
-      }),
+      body: JSON.stringify({ idToken }),
     });
 
     const rawText = await res.text();
-
     let data: any = {};
-    try {
-      data = JSON.parse(rawText);
-    } catch {
-      data = {};
-    }
+    try { data = JSON.parse(rawText); } catch { data = {}; }
 
     console.log("GOOGLE BACKEND RESULT:", data || rawText);
 
@@ -80,9 +87,7 @@ export default function Login() {
     }
 
     await setLogin(true);
-
     const globalObject = globalThis as any;
-
     if (globalObject.localStorage) {
       globalObject.localStorage.setItem("isLogin", "true");
       globalObject.localStorage.setItem("user", JSON.stringify(data.data || {}));
@@ -91,51 +96,46 @@ export default function Login() {
     router.replace("/(tabs)");
   }, [API_URL]);
 
+  // ✨ 修正：監聽手機端 Google 登入回傳的 Token 狀態
   useEffect(() => {
-    const checkGoogleRedirect = async () => {
-      try {
-        const redirectResult = await getRedirectResult(auth);
+    if (response?.type === "success" && response.params?.id_token) {
+      const { id_token } = response.params;
 
-        if (redirectResult?.user) {
-          console.log("GOOGLE REDIRECT RESULT:", redirectResult.user.email);
-          await finishGoogleLogin(redirectResult.user);
-        }
-      } catch (error: any) {
-        console.log("Google redirect 登入錯誤：", error);
-        Alert.alert(
-          "Google 登入失敗",
-          `${error?.code || ""}\n${error?.message || error}`
-        );
-      }
-    };
+      // 使用 idToken 登入 Firebase，成功後會自動觸發 Firebase 狀態更新
+      const credential = GoogleAuthProvider.credential(id_token);
+      signInWithCredential(auth, credential)
+        .then((result) => {
+          finishGoogleLogin(result.user);
+        })
+        .catch((error) => {
+          console.log("手機端 Firebase 憑證登入失敗：", error);
+          Alert.alert("Google 登入失敗", "無法同步身分至 Firebase");
+        });
+    }
+  }, [response, finishGoogleLogin]);
 
-    checkGoogleRedirect();
-  }, [finishGoogleLogin]);
-
+  // ✨ 修正：點擊 Google 登入按鈕的處理邏輯
   const handleGoogleLogin = async () => {
     try {
-      const provider = new GoogleAuthProvider();
-
-      provider.setCustomParameters({
-        prompt: "select_account",
-      });
-
       if (Platform.OS === "web") {
+        // Web 端繼續保持漂亮的 Popup 登入
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: "select_account" });
         const result = await signInWithPopup(auth, provider);
         await finishGoogleLogin(result.user);
-        return;
+      } else {
+        // 📱 手機端：呼叫 Expo WebBrowser 彈窗進行 Google 認證
+        promptAsync();
       }
-
-      await signInWithRedirect(auth, provider);
     } catch (error: any) {
-      console.log("Google redirect 錯誤：", error);
-
+      console.log("Google 登入錯誤：", error);
       Alert.alert(
         "Google 登入失敗",
         `${error?.code || ""}\n${error?.message || error}`
       );
     }
   };
+
   const handleLogin = async () => {
     const account = email.trim();
     const inputPassword = password.trim();
@@ -147,15 +147,9 @@ export default function Login() {
 
     try {
       const loginUrl = `${API_URL}/api/auth/login`;
-
-      console.log("LOGIN URL:", loginUrl);
-      console.log("LOGIN ACCOUNT:", account);
-
       const res = await fetch(loginUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           account,
           email: account,
@@ -165,52 +159,26 @@ export default function Login() {
       });
 
       const text = await res.text();
-
-      console.log("LOGIN RAW RESPONSE:", text);
-
       let result: any;
-
-      try {
-        result = JSON.parse(text);
-      } catch (parseError) {
-        console.log("JSON parse error:", parseError);
+      try { result = JSON.parse(text); } catch (parseError) {
         Alert.alert("登入失敗", "後端回傳格式不是 JSON");
         return;
       }
-
-      console.log("LOGIN RESULT:", result);
 
       if (!res.ok || result.success !== true) {
         Alert.alert("登入失敗", result.message || "帳號或密碼錯誤");
         return;
       }
 
-      try {
-        await setLogin(true);
-        console.log("setLogin success");
-      } catch (loginStateError) {
-        console.log("setLogin failed, continue anyway:", loginStateError);
+      await setLogin(true);
+      const storage = (globalThis as any).localStorage;
+      if (storage) {
+        storage.setItem("isLogin", "true");
+        storage.setItem("user", JSON.stringify(result.data));
       }
-
-      try {
-        const storage = (globalThis as any).localStorage;
-
-        if (storage) {
-          storage.setItem("isLogin", "true");
-          storage.setItem("user", JSON.stringify(result.data));
-        }
-      } catch (storageError) {
-        console.log("localStorage failed:", storageError);
-      }
-
-      console.log("準備跳轉到 tabs");
       router.replace("/(tabs)");
     } catch (error) {
-      console.log("登入錯誤：", error);
-
-      const message =
-        error instanceof Error ? error.message : "無法連接到伺服器";
-
+      const message = error instanceof Error ? error.message : "無法連接到伺服器";
       Alert.alert("登入失敗", message);
     }
   };
@@ -222,7 +190,6 @@ export default function Login() {
 
   const handleForgotPassword = async () => {
     const targetEmail = resetEmail.trim().toLowerCase();
-
     if (!targetEmail) {
       Alert.alert("重設失敗", "請先輸入您的電子郵件");
       return;
@@ -230,40 +197,15 @@ export default function Login() {
 
     try {
       setIsResetLoading(true);
-
-      try {
-        const registeredEmailDoc = await getDoc(
-          doc(db, "registeredEmails", encodeURIComponent(targetEmail))
-        );
-
-        if (!registeredEmailDoc.exists()) {
-          console.log("Reset email index not found:", targetEmail);
-        }
-      } catch (indexError: any) {
-        console.log(
-          "Reset email index read error:",
-          indexError?.code,
-          indexError?.message
-        );
-      }
-
       await sendPasswordResetEmail(auth, targetEmail);
       setShowForgotModal(false);
       Alert.alert("已寄出重設信", "請到信箱查看密碼重設連結");
     } catch (error: any) {
-      const errorCode = error?.code;
-
-      if (errorCode === "auth/invalid-email") {
+      if (error?.code === "auth/invalid-email") {
         Alert.alert("重設失敗", "電子郵件格式不正確");
-        return;
+      } else {
+        Alert.alert("重設失敗", "目前無法寄出重設信，請稍後再試");
       }
-
-      if (errorCode === "auth/user-not-found") {
-        Alert.alert("重設失敗", "找不到此電子郵件的帳號");
-        return;
-      }
-
-      Alert.alert("重設失敗", "目前無法寄出重設信，請稍後再試");
     } finally {
       setIsResetLoading(false);
     }
