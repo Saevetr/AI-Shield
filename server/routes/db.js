@@ -1,14 +1,23 @@
 const sql = require("mssql");
 require("dotenv").config();
 
+const parseBoolean = (value, defaultValue) => {
+  if (value === undefined || value === "") return defaultValue;
+  return String(value).trim().toLowerCase() === "true";
+};
+
 const dbConfig = {
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   server: process.env.DB_SERVER || process.env.DB_HOST,
   database: process.env.DB_NAME || process.env.DB_DATABASE || process.env.DATABASE,
+  port: Number(process.env.DB_PORT || 1433),
   options: {
-    encrypt: true,
-    trustServerCertificate: true,
+    encrypt: parseBoolean(process.env.DB_ENCRYPT, true),
+    trustServerCertificate: parseBoolean(
+      process.env.DB_TRUST_SERVER_CERTIFICATE,
+      false
+    ),
   },
   pool: {
     max: 10,
