@@ -32,7 +32,7 @@ export default function Login() {
     return (
       globalObject?.location?.origin ||
       process.env.EXPO_PUBLIC_FRONTEND_URL ||
-      "http://localhost:8082"
+      "https://maipianaishield-d61c7.web.app"
     );
   };
 

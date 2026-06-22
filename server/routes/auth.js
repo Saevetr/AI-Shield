@@ -335,7 +335,7 @@ const readLineState = (state) => {
   return stateData;
 };
 
-const buildLineFrontendRedirect = (frontendUrl, status, message) => {
+const buildLineFrontendRedirect = (frontendUrl, status, message, extraParams = {}) => {
   const target = new URL("/line-callback", getLineFrontendUrl(frontendUrl));
   target.searchParams.set("status", status);
 
@@ -343,7 +343,61 @@ const buildLineFrontendRedirect = (frontendUrl, status, message) => {
     target.searchParams.set("message", message);
   }
 
+  Object.entries(extraParams).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      target.searchParams.set(key, String(value));
+    }
+  });
+
   return target.toString();
+};
+
+const createLineLoginTicket = (user) => {
+  const secret = process.env.LINE_CHANNEL_SECRET;
+  const payload = Buffer.from(
+    JSON.stringify({
+      userId: user.user_id,
+      issuedAt: Date.now(),
+      nonce: crypto.randomBytes(16).toString("hex"),
+    })
+  ).toString("base64url");
+  const signature = crypto
+    .createHmac("sha256", secret)
+    .update(payload)
+    .digest("base64url");
+
+  return `${payload}.${signature}`;
+};
+
+const readLineLoginTicket = (ticket) => {
+  const [payload, signature] = String(ticket || "").split(".");
+  const secret = process.env.LINE_CHANNEL_SECRET;
+
+  if (!payload || !signature || !secret) {
+    throw new Error("Invalid LINE login ticket");
+  }
+
+  const expectedSignature = crypto
+    .createHmac("sha256", secret)
+    .update(payload)
+    .digest("base64url");
+  const receivedBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+
+  if (
+    receivedBuffer.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(receivedBuffer, expectedBuffer)
+  ) {
+    throw new Error("Invalid LINE login ticket signature");
+  }
+
+  const ticketData = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+
+  if (!ticketData.issuedAt || Date.now() - ticketData.issuedAt > 5 * 60 * 1000) {
+    throw new Error("LINE login ticket expired");
+  }
+
+  return ticketData;
 };
 
 // LINE 第三方登入起點
@@ -369,6 +423,32 @@ router.get("/line-login", (req, res) => {
   });
 
   res.redirect(`https://access.line.me/oauth2/v2.1/authorize?${params.toString()}`);
+});
+
+router.post("/line-login/complete", async (req, res) => {
+  let ticketData;
+
+  try {
+    ticketData = readLineLoginTicket(req.body.ticket);
+  } catch (error) {
+    return res.status(401).json({ success: false, message: "LINE 登入憑證無效或已過期" });
+  }
+
+  try {
+    const [users] = await db.query(
+      "SELECT user_id, username, email, phone, membership_level, status, customer_id FROM [user] WHERE user_id = ? AND status = 'ACTIVE' LIMIT 1",
+      [ticketData.userId]
+    );
+
+    if (users.length === 0) {
+      return res.status(401).json({ success: false, message: "找不到 LINE 登入使用者" });
+    }
+
+    return res.json({ success: true, message: "LINE 登入成功", data: users[0] });
+  } catch (error) {
+    console.error("LINE login completion error:", error);
+    return res.status(500).json({ success: false, message: "LINE 登入驗證失敗" });
+  }
 });
 
 const handleLineCallback = async (req, res) => {
@@ -453,8 +533,19 @@ const handleLineCallback = async (req, res) => {
       }
     }
 
+    const [lineUsers] = await db.query(
+      "SELECT user_id, username, email, phone, membership_level, status, customer_id FROM [user] WHERE email = ? LIMIT 1",
+      [lineEmail]
+    );
+
+    if (lineUsers.length === 0) {
+      throw new Error("LINE user synchronization failed");
+    }
+
+    const ticket = createLineLoginTicket(lineUsers[0]);
+
     return res.redirect(
-      buildLineFrontendRedirect(frontendUrl, "success", "LINE login successful")
+      buildLineFrontendRedirect(frontendUrl, "success", "LINE login successful", { ticket })
     );
   } catch (error) {
     console.error("LINE callback error:", error);
