@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { setLogin } from "@/utils/auth";
 
@@ -37,8 +37,14 @@ export default function LineCallback() {
         const storage = (globalThis as any).localStorage;
 
         if (storage) {
-          storage.setItem("isLogin", "true");
           storage.setItem("user", JSON.stringify(data.data || {}));
+        }
+
+        setMessage("LINE 登入成功，正在進入系統...");
+
+        if (Platform.OS === "web" && (globalThis as any).location) {
+          (globalThis as any).location.replace("/");
+          return;
         }
 
         router.replace("/(tabs)");
