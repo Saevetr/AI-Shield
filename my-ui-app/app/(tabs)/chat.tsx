@@ -10,12 +10,13 @@ import {
   Platform,
   SafeAreaView,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+
+import { chatStyles as styles } from "./tabs.styles";
 
 // 修正後的資料結構：增加 sender 欄位區分使用者與 AI
 type ChatMessage = {
@@ -279,101 +280,3 @@ export default function ChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#ffffff" },
-  screen: { flex: 1, backgroundColor: "#ffffff" },
-  header: {
-    height: 74,
-    backgroundColor: "#ffffff",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 9,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-  },
-  backButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
-  headerTitle: { color: "#111827", fontSize: 18, fontWeight: "500" },
-  headerSpacer: { width: 48 },
-  chatArea: { flex: 1, backgroundColor: "#f8fbff" },
-  chatContent: { paddingHorizontal: 14, paddingTop: 16, paddingBottom: 18 },
-  
-  messageRow: { flexDirection: "row", marginBottom: 12 },
-  rowUser: { justifyContent: "flex-end" },
-  rowAI: { justifyContent: "flex-start" },
-
-  userBubble: {
-    maxWidth: "78%",
-    borderRadius: 16,
-    borderBottomRightRadius: 4,
-    backgroundColor: "#397bf2",
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-  },
-  userBubbleText: { color: "#ffffff", fontSize: 14, lineHeight: 20 },
-
-  aiBubble: {
-    maxWidth: "78%",
-    borderRadius: 16,
-    borderBottomLeftRadius: 4,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  aiBubbleText: { color: "#1f2937", fontSize: 14, lineHeight: 21 },
-  loadingBubble: { flexDirection: "row", alignItems: "center", backgroundColor: "#f3f4f6" },
-
-  imageBubble: {
-    width: 190,
-    height: 190,
-    borderRadius: 16,
-    borderBottomRightRadius: 4,
-    backgroundColor: "#e9eef6",
-    overflow: "hidden",
-  },
-  chatImage: { width: "100%", height: "100%" },
-  
-  previewContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: "#ffffff",
-    borderTopWidth: 1,
-    borderTopColor: "#f1f4f8",
-    alignItems: "center",
-  },
-  previewImage: { width: 50, height: 50, borderRadius: 6 },
-  closePreview: { position: "absolute", top: 2, left: 54 },
-
-  inputBar: {
-    minHeight: 56,
-    backgroundColor: "#ffffff",
-    flexDirection: "row",
-    alignItems: "flex-end",
-    paddingHorizontal: 6,
-    paddingTop: 7,
-    paddingBottom: 7,
-    gap: 4,
-    borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
-  },
-  toolButton: { width: 30, height: 40, alignItems: "center", justifyContent: "center" },
-  inputBox: {
-    flex: 1,
-    minHeight: 38,
-    maxHeight: 92,
-    borderRadius: 8,
-    backgroundColor: "#f1f4f8",
-    justifyContent: "center",
-    paddingHorizontal: 10,
-  },
-  input: {
-    color: "#111827",
-    fontSize: 14,
-    lineHeight: 18,
-    paddingVertical: Platform.OS === "ios" ? 9 : 6,
-    textAlignVertical: "center",
-  },
-});

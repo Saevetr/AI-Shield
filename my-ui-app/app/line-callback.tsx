@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { setLogin } from "@/utils/auth";
+import styles from "./styles";
 
 export default function LineCallback() {
   const params = useLocalSearchParams();
@@ -21,24 +22,9 @@ export default function LineCallback() {
   }, [params.status]);
 
   return (
-    <View style={styles.container}>
+    <View style={styles.lineCallbackContainer}>
       <ActivityIndicator size="large" />
-      <Text style={styles.text}>LINE 登入處理中...</Text>
+      <Text style={styles.lineCallbackText}>LINE 登入處理中...</Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#eef5ff",
-  },
-  text: {
-    marginTop: 16,
-    color: "#2f62b9",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-});

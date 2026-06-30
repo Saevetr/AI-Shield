@@ -1,9 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { HapticTab } from "@/components/haptic-tab";
+
+import { tabLayoutStyles as styles } from "./tabs.styles";
 
 const tabConfig = {
   reports: { label: "通報紀錄", icon: "newspaper-outline" },
@@ -90,43 +92,3 @@ export default function TabLayout() {
   );
 }
 
-const styles = StyleSheet.create({
-  tabBar: {
-    height: 62,
-    backgroundColor: "#ffffff",
-    borderTopWidth: 1,
-    borderTopColor: "#eef2f7",
-    paddingTop: 5,
-    paddingBottom: 4,
-  },
-  tabItem: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tabIconWrap: {
-    width: 60,
-    height: 53,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  iconBox: {
-    width: 36,
-    height: 30,
-    borderRadius: 5,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  iconBoxActive: {
-    backgroundColor: "#f1f5f9",
-  },
-  tabLabel: {
-    color: "#7b8794",
-    fontSize: 9,
-    lineHeight: 13,
-    marginTop: 1,
-  },
-  tabLabelActive: {
-    color: "#397bf2",
-    fontWeight: "700",
-  },
-});

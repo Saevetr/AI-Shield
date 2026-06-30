@@ -5,13 +5,14 @@ Text,
 TextInput,
 Pressable,
 TouchableOpacity,
-StyleSheet,
 Image,
 Alert,
 ScrollView,
 } from "react-native";
 
 import { router } from "expo-router";
+
+import { register as styles } from "./styles";
 
 export default function Register() {
 const [username, setUsername] = useState("");
@@ -271,133 +272,3 @@ resizeMode="contain"
 );
 }
 
-const styles = StyleSheet.create({
-scrollContent: {
-flexGrow: 1,
-backgroundColor: "#eef5ff",
-},
-container: {
-flex: 1,
-paddingHorizontal: 28,
-paddingTop: 48,
-paddingBottom: 40,
-backgroundColor: "#eef5ff",
-},
-logoContainer: {
-alignItems: "center",
-justifyContent: "center",
-marginTop: 18,
-marginBottom: 10,
-},
-logo: {
-width: 250,
-height: 160,
-},
-hexagonBg: {
-position: "absolute",
-left: 0,
-bottom: -50,
-width: 300,
-height: 300,
-opacity: 0.32,
-zIndex: 0,
-},
-dividerRow: {
-flexDirection: "row",
-alignItems: "center",
-marginVertical: 10,
-},
-line: {
-flex: 1,
-height: 1,
-backgroundColor: "#d7e5f8",
-},
-welcome: {
-marginHorizontal: 14,
-fontSize: 17,
-color: "#2f62b9",
-fontWeight: "800",
-letterSpacing: 2,
-},
-subtitle: {
-textAlign: "center",
-color: "#6c86aa",
-marginBottom: 18,
-fontSize: 13,
-},
-inputBox: {
-height: 48,
-borderWidth: 1,
-borderColor: "#dbe8f7",
-borderRadius: 11,
-backgroundColor: "#ffffff",
-flexDirection: "row",
-alignItems: "center",
-paddingHorizontal: 14,
-marginBottom: 12,
-zIndex: 1,
-},
-icon: {
-width: 22,
-height: 22,
-marginRight: 10,
-resizeMode: "contain",
-},
-input: {
-flex: 1,
-fontSize: 15,
-color: "#1f2937",
-},
-eyeImage: {
-width: 22,
-height: 22,
-tintColor: "#6c86aa",
-},
-messageText: {
-color: "#dc2626",
-fontSize: 14,
-fontWeight: "700",
-textAlign: "center",
-marginBottom: 10,
-},
-registerButton: {
-height: 50,
-backgroundColor: "#397bf2",
-borderRadius: 11,
-justifyContent: "center",
-alignItems: "center",
-marginTop: 6,
-marginBottom: 16,
-zIndex: 2,
-},
-disabledButton: {
-opacity: 0.6,
-},
-registerText: {
-color: "#fff",
-fontSize: 21,
-fontWeight: "bold",
-letterSpacing: 4,
-},
-orText: {
-marginHorizontal: 14,
-color: "#8a97a8",
-fontSize: 13,
-},
-loginButton: {
-height: 50,
-borderWidth: 1,
-borderColor: "#c9dcf5",
-borderRadius: 11,
-justifyContent: "center",
-alignItems: "center",
-backgroundColor: "#edf4ff",
-marginTop: 4,
-zIndex: 2,
-},
-loginText: {
-fontSize: 18,
-color: "#2f62b9",
-fontWeight: "800",
-},
-});

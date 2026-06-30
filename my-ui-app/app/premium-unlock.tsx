@@ -2,11 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import {
   SafeAreaView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+
+import { premiumunlock as styles } from './styles';
 
 const previewItems = [
   {
@@ -85,131 +86,3 @@ export default function PremiumUnlockScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#f8fbff",
-  },
-  header: {
-    height: 66,
-    backgroundColor: "#f8fbff",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eef2f7",
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    color: "#111827",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  headerSpacer: {
-    width: 44,
-  },
-  container: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingTop: 22,
-    paddingBottom: 24,
-  },
-  heroCard: {
-    borderRadius: 20,
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    paddingHorizontal: 22,
-    paddingTop: 28,
-    paddingBottom: 26,
-    marginBottom: 14,
-  },
-  heroIcon: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
-    backgroundColor: "#edf4ff",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  title: {
-    color: "#111827",
-    fontSize: 24,
-    fontWeight: "900",
-    marginBottom: 8,
-    letterSpacing: 1,
-  },
-  subtitle: {
-    color: "#6c86aa",
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: "center",
-  },
-  previewCard: {
-    borderRadius: 18,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 14,
-    paddingTop: 16,
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    color: "#111827",
-    fontSize: 15,
-    fontWeight: "900",
-    marginBottom: 8,
-    marginLeft: 2,
-  },
-  previewRow: {
-    minHeight: 72,
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#edf1f6",
-  },
-  lastPreviewRow: {
-    borderBottomWidth: 0,
-  },
-  previewIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: "#edf4ff",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  previewTextWrap: {
-    flex: 1,
-  },
-  previewTitle: {
-    color: "#111827",
-    fontSize: 15,
-    fontWeight: "900",
-    marginBottom: 4,
-  },
-  previewText: {
-    color: "#8a97a8",
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: "600",
-  },
-  backHomeButton: {
-    height: 50,
-    borderRadius: 14,
-    backgroundColor: "#397bf2",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  backHomeText: {
-    color: "#ffffff",
-    fontSize: 17,
-    fontWeight: "900",
-    letterSpacing: 2,
-  },
-});

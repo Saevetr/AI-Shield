@@ -4,12 +4,10 @@ import {
   Alert,
   Image,
   Linking,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  Platform,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import {
@@ -18,6 +16,8 @@ import {
 } from "firebase/auth";
 
 import { auth } from "@/app/config/firebase";
+
+import { resetPasswordStyles as styles } from "./styles";
 
 export default function ResetPasswordScreen() {
   const params = useLocalSearchParams<{
@@ -218,193 +218,3 @@ export default function ResetPasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: 28,
-    paddingTop: 42,
-    backgroundColor: "#eef5ff",
-    justifyContent: "flex-start",
-    overflow: "hidden",
-    ...(Platform.OS === "web"
-      ? ({
-          minHeight: "100dvh",
-          overflowY: "auto",
-          touchAction: "pan-y",
-        } as any)
-      : {}),
-  },
-  logoContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 18,
-    marginBottom: 18,
-  },
-  logo: {
-    width: 250,
-    height: 160,
-  },
-  card: {
-    borderRadius: 18,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 20,
-    paddingVertical: 22,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
-    zIndex: 2,
-    marginTop: 0,
-  },
-  title: {
-    color: "#1f2937",
-    fontSize: 24,
-    fontWeight: "800",
-    textAlign: "center",
-    marginBottom: 8,
-    letterSpacing: 2,
-  },
-  subtitle: {
-    color: "#6c86aa",
-    fontSize: 13,
-    textAlign: "center",
-    marginBottom: 16,
-  },
-  stateBox: {
-    alignItems: "center",
-    gap: 10,
-    paddingVertical: 18,
-  },
-  stateText: {
-    color: "#6c86aa",
-    fontSize: 14,
-  },
-  errorText: {
-    color: "#d14343",
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: "center",
-    marginVertical: 14,
-  },
-  successText: {
-    color: "#1f2937",
-    fontSize: 22,
-    fontWeight: "800",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  successBox: {
-    alignItems: "center",
-    paddingTop: 8,
-    paddingBottom: 12,
-  },
-  successIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: "#22c55e",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 18,
-  },
-  successIcon: {
-    color: "#fff",
-    fontSize: 42,
-    fontWeight: "800",
-    lineHeight: 46,
-  },
-  successDescription: {
-    color: "#6c86aa",
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: "center",
-  },
-  emailBox: {
-    minHeight: 40,
-    borderRadius: 10,
-    backgroundColor: "#edf4ff",
-    justifyContent: "center",
-    paddingHorizontal: 12,
-    marginBottom: 14,
-  },
-  emailText: {
-    color: "#2f62b9",
-    fontSize: 14,
-    textAlign: "center",
-  },
-  inputBox: {
-    height: 48,
-    borderWidth: 1,
-    borderColor: "#dbe8f7",
-    borderRadius: 11,
-    backgroundColor: "#fff",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    marginBottom: 12,
-    ...(Platform.OS === "web"
-      ? ({
-          touchAction: "manipulation",
-        } as any)
-      : {}),
-  },
-  icon: {
-    width: 22,
-    height: 22,
-    marginRight: 10,
-    resizeMode: "contain",
-  },
-  input: {
-    flex: 1,
-    color: "#1f2937",
-    fontSize: 15,
-    ...(Platform.OS === "web"
-      ? ({
-          touchAction: "manipulation",
-        } as any)
-      : {}),
-  },
-  eyeImage: {
-    width: 22,
-    height: 22,
-    tintColor: "#6c86aa",
-  },
-  primaryButton: {
-    height: 50,
-    borderRadius: 11,
-    backgroundColor: "#397bf2",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 4,
-  },
-  primaryText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "800",
-    letterSpacing: 2,
-  },
-  secondaryButton: {
-    height: 48,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: "#c9dcf5",
-    backgroundColor: "#edf4ff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  secondaryText: {
-    color: "#2f62b9",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  hexagonBg: {
-    position: "absolute",
-    left: 0,
-    bottom: -50,
-    width: 300,
-    height: 300,
-    opacity: 0.32,
-    zIndex: 0,
-  },
-});

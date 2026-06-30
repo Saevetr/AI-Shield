@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  StyleSheet,
   Image,
   Modal,
   ScrollView,
@@ -21,6 +20,8 @@ import {
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/app/config/firebase";
 import { setLogin } from "@/utils/auth";
+
+import { loginStyles as styles } from "./styles";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -339,41 +340,3 @@ export default function Login() {
   );
 }
 
-const styles = StyleSheet.create({
-  scrollContent: { flexGrow: 1, backgroundColor: "#eef5ff" },
-  container: { flex: 1, paddingHorizontal: 28, paddingTop: 48, paddingBottom: 40, backgroundColor: "#eef5ff" },
-  logoContainer: { alignItems: "center", justifyContent: "center", marginTop: 18, marginBottom: 10 },
-  logo: { width: 250, height: 160 },
-  dividerRow: { flexDirection: "row", alignItems: "center", marginVertical: 10 },
-  line: { flex: 1, height: 1, backgroundColor: "#d7e5f8" },
-  welcome: { marginHorizontal: 14, fontSize: 17, color: "#2f62b9", fontWeight: "800", letterSpacing: 2 },
-  subtitle: { textAlign: "center", color: "#6c86aa", marginBottom: 18, fontSize: 13 },
-  inputBox: { height: 48, borderWidth: 1, borderColor: "#dbe8f7", borderRadius: 11, backgroundColor: "#ffffff", flexDirection: "row", alignItems: "center", paddingHorizontal: 14, marginBottom: 12, zIndex: 2 },
-  input: { flex: 1, fontSize: 15, color: "#1f2937" },
-  optionRow: { flexDirection: "row", marginBottom: 14, justifyContent: "space-between" },
-  remember: { color: "#6c86aa", fontSize: 13 },
-  forgot: { color: "#397bf2", fontSize: 13, fontWeight: "700" },
-  loginButton: { height: 50, backgroundColor: "#397bf2", borderRadius: 11, justifyContent: "center", alignItems: "center", marginBottom: 16, zIndex: 2 },
-  loginText: { color: "#fff", fontSize: 21, fontWeight: "bold", letterSpacing: 4 },
-  orText: { marginHorizontal: 14, color: "#8a97a8", fontSize: 13 },
-  socialRow: { flexDirection: "row", gap: 14, marginVertical: 14 },
-  socialButton: { flex: 1, height: 50, backgroundColor: "#ffffff", borderWidth: 1, borderColor: "#e3edf9", borderRadius: 11, alignItems: "center", justifyContent: "center", flexDirection: "row" },
-  socialText: { fontSize: 15, color: "#1f2937", fontWeight: "700" },
-  registerButton: { height: 50, borderWidth: 1, borderColor: "#c9dcf5", borderRadius: 11, justifyContent: "center", alignItems: "center", backgroundColor: "#edf4ff", marginTop: 4, zIndex: 2 },
-  registerText: { fontSize: 18, color: "#2f62b9", fontWeight: "800" },
-  hexagonBg: { position: "absolute", left: 0, bottom: -50, width: 300, height: 300, opacity: 0.32, zIndex: 0 },
-  icon: { width: 22, height: 22, marginRight: 10, resizeMode: "contain" },
-  eyeImage: { width: 22, height: 22, tintColor: "#6c86aa" },
-  socialIcon: { width: 24, height: 24, marginRight: 8, resizeMode: "contain" },
-  registerContent: { flexDirection: "row", alignItems: "center" },
-  registerIcon: { width: 22, height: 22, marginRight: 10, resizeMode: "contain" },
-  modalOverlay: { flex: 1, backgroundColor: "rgba(31, 41, 55, 0.32)", alignItems: "center", justifyContent: "center", paddingHorizontal: 28 },
-  modalCard: { width: "100%", borderRadius: 16, backgroundColor: "#f8fbff", paddingHorizontal: 20, paddingTop: 22, paddingBottom: 18 },
-  modalTitle: { color: "#1f2937", fontSize: 20, fontWeight: "700", textAlign: "center", marginBottom: 8 },
-  modalSubtitle: { color: "#6c86aa", fontSize: 13, textAlign: "center", marginBottom: 18 },
-  modalInputBox: { height: 48, borderWidth: 1, borderColor: "#dbe8f7", borderRadius: 11, backgroundColor: "#fff", flexDirection: "row", alignItems: "center", paddingHorizontal: 14, marginBottom: 14 },
-  modalConfirmButton: { height: 48, borderRadius: 11, backgroundColor: "#397bf2", alignItems: "center", justifyContent: "center", marginBottom: 10 },
-  modalConfirmText: { color: "#fff", fontSize: 17, fontWeight: "700", letterSpacing: 2 },
-  modalCancelButton: { height: 42, borderRadius: 11, borderWidth: 1, borderColor: "#c9dcf5", backgroundColor: "#ffffff", alignItems: "center", justifyContent: "center" },
-  modalCancelText: { color: "#2f62b9", fontSize: 15, fontWeight: "700" },
-});
