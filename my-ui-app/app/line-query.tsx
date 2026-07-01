@@ -6,12 +6,13 @@ import {
   Image,
   SafeAreaView,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+
+import { lineQueryStyles as styles } from "./styles";
 
 type RiskLevel = "high" | "medium" | "low";
 
@@ -65,9 +66,6 @@ const riskStyleMap = {
   }
 >;
 
-const API_BASE =
-  process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
-
 export default function LineQueryScreen() {
   const [lineId, setLineId] = useState("");
   const [records, setRecords] = useState<QueryRecord[]>([]);
@@ -88,15 +86,11 @@ export default function LineQueryScreen() {
     try {
       setLoading(true);
 
-      const backendUrl = `${API_BASE}/api/check/check-line`;
+      const backendUrl = `http://localhost:3000/api/check-line?lineId=${encodeURIComponent(
+        normalizedLineId
+      )}`;
 
-      const res = await fetch(backendUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ lineId: normalizedLineId }),
-      });
+      const res = await fetch(backendUrl);
 
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
@@ -194,111 +188,13 @@ export default function LineQueryScreen() {
   };
 
   const handleBack = () => {
-  
-  if (queryResult) {
+    if (queryResult) {
       setQueryResult(null);
       return;
     }
 
     router.back();
   };
-  const showMessage = (title: string, message: string) => {
-    const globalObject = globalThis as any;
-
-    if (typeof globalObject.alert === "function") {
-      globalObject.alert(`${title}\n${message}`);
-      return;
-    }
-
-    Alert.alert(title, message);
-  };
-
-  const handleAddToBlacklist = async () => {
-    console.log("ADD BLACKLIST BUTTON CLICKED");
-
-    if (!queryResult) {
-      showMessage("加入失敗", "目前沒有 LINE 查詢結果。");
-      return;
-    }
-
-    try {
-      const res = await fetch(`${API_BASE}/api/check/blacklist`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          lineId: queryResult.lineId,
-          reason: queryResult.reason || "使用者手動加入黑名單",
-        }),
-      });
-
-      const rawText = await res.text();
-
-      let data: any = {};
-      try {
-        data = JSON.parse(rawText);
-      } catch {
-        data = {};
-      }
-
-      console.log("ADD BLACKLIST RESULT:", data || rawText);
-
-      if (!res.ok || data.success === false) {
-        throw new Error(data.message || `HTTP ${res.status}`);
-      }
-
-      showMessage("已加入黑名單", `${queryResult.lineId} 已加入黑名單。`);
-    } catch (error: any) {
-      console.log("加入黑名單失敗：", error);
-      showMessage("加入失敗", error?.message || "無法加入黑名單。");
-    }
-  };
-
-  const handleReportLine = async () => {
-    console.log("REPORT LINE BUTTON CLICKED");
-
-    if (!queryResult) {
-      showMessage("通報失敗", "目前沒有 LINE 查詢結果。");
-      return;
-    }
-
-    try {
-      const res = await fetch(`${API_BASE}/api/check/report-line`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          lineId: queryResult.lineId,
-          reason: queryResult.reason || "使用者通報 LINE ID",
-          userId: 5,
-        }),
-      });
-
-      const rawText = await res.text();
-
-      let data: any = {};
-      try {
-        data = JSON.parse(rawText);
-      } catch {
-        data = {};
-      }
-
-      console.log("REPORT LINE RESULT:", data || rawText);
-
-      if (!res.ok || data.success === false) {
-        throw new Error(data.message || `HTTP ${res.status}`);
-      }
-
-      showMessage("已送出通報", "感謝你的回報，我們會持續更新風險資料。");
-    } catch (error: any) {
-      console.log("通報失敗：", error);
-      showMessage("通報失敗", error?.message || "無法送出通報。");
-    }
-  };
-
-
 
   if (queryResult) {
     const riskStyle = riskStyleMap[queryResult.level];
@@ -399,7 +295,9 @@ export default function LineQueryScreen() {
           <View style={styles.actionBar}>
             <TouchableOpacity
               style={styles.secondaryAction}
-              onPress={handleAddToBlacklist}
+              onPress={() =>
+                Alert.alert("已加入黑名單", "此 LINE ID 已加入黑名單示意清單。")
+              }
               activeOpacity={0.82}
             >
               <Text style={styles.secondaryActionText}>加入黑名單</Text>
@@ -407,7 +305,9 @@ export default function LineQueryScreen() {
 
             <TouchableOpacity
               style={styles.reportAction}
-              onPress={handleReportLine}
+              onPress={() =>
+                Alert.alert("已送出通報", "感謝你的回報，我們會持續更新風險資料。")
+              }
               activeOpacity={0.82}
             >
               <Text style={styles.reportActionText}>我要通報</Text>
@@ -525,394 +425,4 @@ export default function LineQueryScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#f8fbff",
-  },
-  scrollContent: {
-    flexGrow: 1,
-    backgroundColor: "#f8fbff",
-    paddingHorizontal: 16,
-    paddingBottom: 32,
-  },
-  backButton: {
-    width: 48,
-    height: 48,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 24,
-    marginLeft: -8,
-  },
-  queryCard: {
-    borderRadius: 24,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 18,
-    paddingTop: 24,
-    paddingBottom: 18,
-    alignItems: "center",
-    shadowColor: "#9bb6d9",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.12,
-    shadowRadius: 22,
-    elevation: 4,
-  },
-  iconCircle: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: "#edfdf3",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  lineIcon: {
-    width: 44,
-    height: 44,
-  },
-  title: {
-    color: "#111827",
-    fontSize: 18,
-    fontWeight: "800",
-    marginBottom: 5,
-  },
-  subtitle: {
-    color: "#7b91b3",
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 18,
-  },
-  inputWrap: {
-    width: "100%",
-    height: 54,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#d8e4f4",
-    backgroundColor: "#ffffff",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    gap: 9,
-    marginBottom: 14,
-  },
-  input: {
-    flex: 1,
-    color: "#111827",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  queryButton: {
-    width: "100%",
-    height: 52,
-    borderRadius: 15,
-    backgroundColor: "#397bf2",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  queryButtonDisabled: {
-    opacity: 0.6,
-  },
-  queryButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  tipCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    borderRadius: 18,
-    backgroundColor: "#eaf2ff",
-    padding: 14,
-    marginTop: 14,
-  },
-  tipTextGroup: {
-    flex: 1,
-  },
-  tipTitle: {
-    color: "#1c4fba",
-    fontSize: 14,
-    fontWeight: "800",
-    marginBottom: 3,
-  },
-  tipText: {
-    color: "#607697",
-    fontSize: 12,
-    fontWeight: "600",
-    lineHeight: 18,
-  },
-  historyCard: {
-    minHeight: 230,
-    borderRadius: 22,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 14,
-    paddingTop: 16,
-    paddingBottom: 16,
-    marginTop: 16,
-  },
-  historyHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  historyTitle: {
-    color: "#111827",
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  historyMore: {
-    color: "#5e7190",
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  recordRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: "#eef2f7",
-    paddingVertical: 13,
-  },
-  recordIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#eefaf1",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 10,
-  },
-  recordLineIcon: {
-    width: 18,
-    height: 18,
-  },
-  recordContent: {
-    flex: 1,
-  },
-  recordValue: {
-    color: "#111827",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  recordResult: {
-    color: "#7b91b3",
-    fontSize: 12,
-    fontWeight: "600",
-    marginTop: 2,
-  },
-  recordTime: {
-    color: "#9aacc8",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  emptyState: {
-    flex: 1,
-    minHeight: 150,
-    alignItems: "center",
-    justifyContent: "center",
-    borderTopWidth: 1,
-    borderTopColor: "#eef2f7",
-  },
-  emptyTitle: {
-    color: "#5e7190",
-    fontSize: 14,
-    fontWeight: "800",
-    marginTop: 8,
-  },
-  emptyText: {
-    color: "#9aacc8",
-    fontSize: 12,
-    fontWeight: "600",
-    marginTop: 4,
-  },
-  resultScreen: {
-    flex: 1,
-    backgroundColor: "#f8fbff",
-  },
-  resultHeader: {
-    height: 66,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 8,
-  },
-  resultBackButton: {
-    width: 48,
-    height: 48,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  resultHeaderTitle: {
-    color: "#111827",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  resultHeaderSpacer: {
-    width: 48,
-  },
-  resultContent: {
-    paddingHorizontal: 8,
-    paddingBottom: 112,
-  },
-  riskBanner: {
-    minHeight: 72,
-    borderRadius: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    marginBottom: 18,
-  },
-  riskBannerText: {
-    flex: 1,
-    marginLeft: 14,
-  },
-  riskTitle: {
-    fontSize: 16,
-    fontWeight: "900",
-    marginBottom: 5,
-  },
-  riskSubtitle: {
-    color: "#8a97a8",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  lineIdentity: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 22,
-  },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "#d9e0ee",
-    overflow: "hidden",
-    alignItems: "center",
-    marginRight: 16,
-  },
-  avatarHead: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#8193b1",
-    marginTop: 9,
-  },
-  avatarBody: {
-    width: 62,
-    height: 34,
-    borderRadius: 31,
-    backgroundColor: "#8193b1",
-    marginTop: 6,
-  },
-  lineInfo: {
-    minWidth: 90,
-  },
-  resultValue: {
-    color: "#111827",
-    fontSize: 18,
-    fontWeight: "800",
-    marginBottom: 8,
-  },
-  resultMeta: {
-    color: "#8aa4c5",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  resultCard: {
-    minHeight: 112,
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 14,
-    marginBottom: 12,
-  },
-  scoreCard: {
-    borderWidth: 1.5,
-    borderColor: "#8fa5c5",
-  },
-  cardHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 24,
-  },
-  resultCardTitle: {
-    color: "#111827",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  scoreText: {
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  scoreTrack: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#edf1f6",
-    overflow: "hidden",
-    marginBottom: 10,
-  },
-  scoreFill: {
-    height: "100%",
-    borderRadius: 4,
-  },
-  scoreDescription: {
-    color: "#7b8794",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  resultCardText: {
-    color: "#607697",
-    fontSize: 12,
-    fontWeight: "600",
-    lineHeight: 19,
-    marginTop: 14,
-  },
-  actionBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 8,
-    paddingTop: 10,
-    paddingBottom: 18,
-    backgroundColor: "#f8fbff",
-  },
-  secondaryAction: {
-    flex: 1,
-    height: 42,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: "#d8d8d8",
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  secondaryActionText: {
-    color: "#111827",
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  reportAction: {
-    flex: 1,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: "#dc2f38",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  reportActionText: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "900",
-  },
-});
-
-
-
 

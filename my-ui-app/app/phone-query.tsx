@@ -5,12 +5,13 @@ import {
   Alert,
   SafeAreaView,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+
+import { phoneQueryStyles as styles } from "./styles";
 
 type RiskLevel = "low" | "medium" | "high";
 
@@ -66,55 +67,21 @@ export default function PhoneQueryScreen() {
       return;
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
     try {
       setLoading(true);
 
-      const API_URL =
-        process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
+      const backendUrl = `http://localhost:3000/api/check-phone?phone=${normalizedPhone}`;
+      const res = await fetch(backendUrl);
 
-      const backendUrl = `${API_URL}/api/check/check-phone`;
-
-      console.log("PHONE CHECK URL:", backendUrl);
-      console.log("PHONE CHECK PHONE:", normalizedPhone);
-
-      const res = await fetch(backendUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ phone: normalizedPhone }),
-        signal: controller.signal,
-      });
-
-      const rawText = await res.text();
-
-      console.log("PHONE CHECK RAW RESPONSE:", rawText);
-
-      let data: any;
-
-      try {
-        data = JSON.parse(rawText);
-      } catch (parseError) {
-        console.log("電話查詢 JSON 解析失敗：", parseError);
-        Alert.alert("查詢失敗", "後端回傳格式不是 JSON");
-        return;
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
       }
 
-      console.log("PHONE CHECK RESULT:", data);
-
-      if (!res.ok || data.success === false) {
-        Alert.alert("查詢失敗", data.message || "電話查詢失敗");
-        return;
-      }
+      const data = await res.json();
 
       const isScam =
         data.isScam === true ||
         data.is_scam === true ||
-        data.isFraud === true ||
-        data.exists === true ||
         data.status === "scam" ||
         data.data?.isScam === true ||
         data.detail?.isScam === true;
@@ -150,25 +117,10 @@ export default function PhoneQueryScreen() {
         const filtered = prev.filter((item) => item.phone !== normalizedPhone);
         return [result, ...filtered].slice(0, 5);
       });
-    } catch (error: any) {
+    } catch (error) {
       console.log("電話查詢錯誤：", error);
-
-      if (error?.name === "AbortError") {
-        Alert.alert(
-          "查詢逾時",
-          "後端超過 8 秒沒有回應，請確認 server 是否正常運作。"
-        );
-        return;
-      }
-
-      Alert.alert(
-        "連線錯誤",
-        `無法連接到伺服器，請確認後端已啟動。\n\n${String(
-          error?.message || error
-        )}`
-      );
+      Alert.alert("連線錯誤", "無法連接到伺服器，請確認後端已啟動。");
     } finally {
-      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
@@ -188,10 +140,7 @@ export default function PhoneQueryScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => router.back()}
-          >
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Ionicons name="chevron-back" size={24} color="#111827" />
           </TouchableOpacity>
 
@@ -228,12 +177,7 @@ export default function PhoneQueryScreen() {
         </View>
 
         {queryResult && currentStyle && (
-          <View
-            style={[
-              styles.resultCard,
-              { backgroundColor: currentStyle.bg },
-            ]}
-          >
+          <View style={[styles.resultCard, { backgroundColor: currentStyle.bg }]}>
             <View style={styles.resultHeader}>
               <Ionicons
                 name={currentStyle.icon}
@@ -242,12 +186,7 @@ export default function PhoneQueryScreen() {
               />
 
               <View style={styles.resultTitleBox}>
-                <Text
-                  style={[
-                    styles.resultTitle,
-                    { color: currentStyle.color },
-                  ]}
-                >
+                <Text style={[styles.resultTitle, { color: currentStyle.color }]}>
                   {currentStyle.title}
                 </Text>
                 <Text style={styles.resultPhone}>{queryResult.phone}</Text>
@@ -298,18 +237,11 @@ export default function PhoneQueryScreen() {
                     />
                     <View>
                       <Text style={styles.historyPhone}>{item.phone}</Text>
-                      <Text style={styles.historyCarrier}>
-                        {item.carrier}
-                      </Text>
+                      <Text style={styles.historyCarrier}>{item.carrier}</Text>
                     </View>
                   </View>
 
-                  <Text
-                    style={[
-                      styles.historyLevel,
-                      { color: itemStyle.color },
-                    ]}
-                  >
+                  <Text style={[styles.historyLevel, { color: itemStyle.color }]}>
                     {itemStyle.title}
                   </Text>
                 </TouchableOpacity>
@@ -322,181 +254,3 @@ export default function PhoneQueryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-  },
-  container: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 24,
-    gap: 12,
-  },
-  backButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#111827",
-  },
-  headerSubtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    color: "#6b7280",
-  },
-  card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 18,
-  },
-  label: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 10,
-  },
-  inputWrapper: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    backgroundColor: "#f9fafb",
-  },
-  input: {
-    flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    fontSize: 16,
-    color: "#111827",
-    outlineStyle: "none" as any,
-  },
-  queryButton: {
-    marginTop: 14,
-    backgroundColor: "#2563eb",
-    paddingVertical: 15,
-    borderRadius: 14,
-    alignItems: "center",
-  },
-  queryButtonDisabled: {
-    opacity: 0.6,
-  },
-  queryButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  resultCard: {
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 18,
-  },
-  resultHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-    gap: 12,
-  },
-  resultTitleBox: {
-    flex: 1,
-  },
-  resultTitle: {
-    fontSize: 22,
-    fontWeight: "900",
-  },
-  resultPhone: {
-    marginTop: 4,
-    fontSize: 15,
-    color: "#374151",
-  },
-  resultInfo: {
-    backgroundColor: "rgba(255,255,255,0.7)",
-    borderRadius: 14,
-    padding: 14,
-  },
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  infoLabel: {
-    fontSize: 14,
-    color: "#6b7280",
-  },
-  infoValue: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#111827",
-  },
-  messageBox: {
-    marginTop: 6,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(0,0,0,0.08)",
-  },
-  messageText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#374151",
-  },
-  historyCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 18,
-    padding: 18,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#111827",
-    marginBottom: 14,
-  },
-  emptyBox: {
-    alignItems: "center",
-    paddingVertical: 28,
-  },
-  emptyText: {
-    marginTop: 8,
-    color: "#9ca3af",
-    fontSize: 14,
-  },
-  historyItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f3f4f6",
-  },
-  historyLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  historyPhone: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#111827",
-  },
-  historyCarrier: {
-    marginTop: 2,
-    fontSize: 12,
-    color: "#6b7280",
-  },
-  historyLevel: {
-    fontSize: 13,
-    fontWeight: "800",
-  },
-});

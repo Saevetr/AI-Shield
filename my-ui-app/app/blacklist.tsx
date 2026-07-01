@@ -17,8 +17,9 @@ import {
   View,
 } from "react-native";
 
-const API_BASE =
-  process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
+import styles from "./styles";
+
+const API_BASE = "http://localhost:3000";
 
 const filterTabs = ["全部", "電話", "LINE ID"] as const;
 
@@ -90,8 +91,8 @@ export default function BlacklistScreen() {
 
       const url =
         activeTab === "全部"
-          ? `${API_BASE}/api/check/blacklist`
-          : `${API_BASE}/api/check/blacklist?type=${encodeURIComponent(activeTab)}`;
+          ? `${API_BASE}/api/blacklist`
+          : `${API_BASE}/api/blacklist?type=${encodeURIComponent(activeTab)}`;
 
       const res = await fetch(url);
 
@@ -147,7 +148,7 @@ export default function BlacklistScreen() {
     try {
       setSaving(true);
 
-      const res = await fetch(`${API_BASE}/api/check/blacklist`, {
+      const res = await fetch(`${API_BASE}/api/blacklist`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -179,7 +180,7 @@ export default function BlacklistScreen() {
 
   const handleRemove = async (item: BlacklistItem) => {
     try {
-      const res = await fetch(`${API_BASE}/api/check/blacklist/${item.id}`, {
+      const res = await fetch(`${API_BASE}/api/blacklist/${item.id}`, {
         method: "DELETE",
       });
 
@@ -410,288 +411,4 @@ export default function BlacklistScreen() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#f8fbff",
-  },
-  screen: {
-    flex: 1,
-    backgroundColor: "#f8fbff",
-  },
-  header: {
-    height: 68,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 8,
-  },
-  backButton: {
-    width: 48,
-    height: 48,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    color: "#111827",
-    fontSize: 17,
-    fontWeight: "700",
-  },
-  editButton: {
-    minWidth: 48,
-    height: 48,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  editText: {
-    color: "#397bf2",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  tabRow: {
-    height: 40,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    marginBottom: 10,
-  },
-  tabButton: {
-    flex: 1,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tabButtonActive: {
-    backgroundColor: "#e8f1ff",
-  },
-  tabText: {
-    color: "#111827",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  tabTextActive: {
-    color: "#397bf2",
-    fontWeight: "900",
-  },
-  list: {
-    flex: 1,
-  },
-  listContent: {
-    paddingHorizontal: 8,
-    paddingBottom: 116,
-  },
-  blacklistCard: {
-    minHeight: 82,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: "#9db0cf",
-    backgroundColor: "#ffffff",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 12,
-  },
-  itemIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  lineIcon: {
-    width: 26,
-    height: 26,
-  },
-  itemInfo: {
-    flex: 1,
-  },
-  itemValue: {
-    color: "#111827",
-    fontSize: 15,
-    fontWeight: "800",
-    marginBottom: 5,
-  },
-  itemNote: {
-    color: "#8aa4c5",
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 2,
-  },
-  itemType: {
-    color: "#8aa4c5",
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  itemNoteText: {
-    color: "#5e7190",
-    fontSize: 12,
-    fontWeight: "700",
-    marginTop: 3,
-  },
-  removeButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#fff0f3",
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 8,
-  },
-  emptyCard: {
-    minHeight: 190,
-    borderRadius: 18,
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 20,
-    marginTop: 8,
-  },
-  emptyTitle: {
-    color: "#5e7190",
-    fontSize: 15,
-    fontWeight: "900",
-    marginTop: 10,
-  },
-  emptyText: {
-    color: "#9aacc8",
-    fontSize: 12,
-    fontWeight: "600",
-    textAlign: "center",
-    marginTop: 5,
-  },
-  bottomBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    paddingHorizontal: 9,
-    paddingTop: 12,
-    paddingBottom: 26,
-    backgroundColor: "#f8fbff",
-  },
-  addButton: {
-    height: 54,
-    borderRadius: 14,
-    backgroundColor: "#397bf2",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  addButtonText: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "900",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.45)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 20,
-  },
-  modalCard: {
-    width: "100%",
-    maxWidth: 460,
-    borderRadius: 22,
-    backgroundColor: "#ffffff",
-    padding: 20,
-  },
-  modalTitle: {
-    color: "#111827",
-    fontSize: 20,
-    fontWeight: "900",
-    marginBottom: 6,
-  },
-  modalSubtitle: {
-    color: "#6b7280",
-    fontSize: 13,
-    fontWeight: "600",
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  typeSwitch: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 14,
-  },
-  typeButton: {
-    flex: 1,
-    height: 42,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#d8e4f4",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#ffffff",
-  },
-  typeButtonActive: {
-    backgroundColor: "#397bf2",
-    borderColor: "#397bf2",
-  },
-  typeButtonText: {
-    color: "#5e7190",
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  typeButtonTextActive: {
-    color: "#ffffff",
-  },
-  modalInput: {
-    minHeight: 48,
-    borderWidth: 1,
-    borderColor: "#d8e4f4",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: "#111827",
-    fontSize: 15,
-    fontWeight: "700",
-    marginBottom: 12,
-    outlineStyle: "none" as any,
-  },
-  noteInput: {
-    minHeight: 78,
-    textAlignVertical: "top",
-  },
-  modalActions: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 4,
-  },
-  cancelButton: {
-    flex: 1,
-    height: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#d8e4f4",
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cancelButtonText: {
-    color: "#111827",
-    fontSize: 15,
-    fontWeight: "900",
-  },
-  saveButton: {
-    flex: 1,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: "#397bf2",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonText: {
-    color: "#ffffff",
-    fontSize: 15,
-    fontWeight: "900",
-  },
-});
-
 

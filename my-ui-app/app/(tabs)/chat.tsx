@@ -10,14 +10,15 @@ import {
   Platform,
   SafeAreaView,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 
-// 擴充訊息型別定義：支援區分 user / ai，並能同時容納文字與圖片
+import { chatStyles as styles } from "./tabs.styles";
+
+// 修正後的資料結構：增加 sender 欄位區分使用者與 AI
 type ChatMessage = {
   id: string;
   sender: "user" | "ai";
@@ -26,9 +27,9 @@ type ChatMessage = {
   uri?: string;
 };
 
-const API_URL =
-  process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
-const BACKEND_URL = `${API_URL}/api/analyze-scam`;
+// ⭐️ 請根據你後端運行的真實 IP 進行修改 (Node.js 本地測試通常是 http://你的電腦IP:3000)
+// 注意：如果是在實機上測試，不能用 localhost，要用跟你手機同一個 Wi-Fi 的電腦 IP 喔！
+const BACKEND_URL = "http://192.168.1.100:3000/api/analyze-scam"; 
 
 export default function ChatScreen() {
   const [message, setMessage] = useState("");
@@ -37,16 +38,16 @@ export default function ChatScreen() {
       id: "welcome",
       sender: "ai",
       type: "text",
-      text: "你好！我是 AI 防詐專家。你可以傳送可疑的對話文字、聊天截圖給我，我會為你進行多模態防詐分析。",
+      text: "你好！我是你的 AI 防詐騙專家。你可以傳送可疑的簡訊文字、對話截圖，我會為你進行多模態深度分析。",
     },
   ]);
-
-  // 暫存使用者挑選但尚未發送的圖片
+  
+  // 暫存當前選取的圖片，發送後才清空
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  // 控制 AI 分析時的轉圈圈狀態
+  // 載入中狀態 (打 API 時顯示轉圈圈)
   const [isLoading, setIsLoading] = useState(false);
 
-  // 串接相簿選取圖片
+  // 點擊相簿只把圖片存到暫存狀態，不直接送出
   const handleAttachImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
@@ -58,30 +59,29 @@ export default function ChatScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsEditing: true,
       mediaTypes: ["images"],
-      quality: 0.85,
+      quality: 0.8,
     });
 
     if (!result.canceled) {
-      // 暫存圖片，等按傳送鈕時再與文字一併打包發送
       setSelectedImage(result.assets[0].uri);
     }
   };
 
   const handleVoiceInput = () => {
-    Alert.alert("語音輸入提示", "您可以點擊鍵盤自帶的語音輸入鍵。若要夾帶錄音檔，可封裝音檔至 FormData 的 scamAudio 欄位。");
+    Alert.alert("語音功能提示", "你可以使用手機內建的輸入法語音轉文字功能輸入。若需上傳即時錄音檔，可配合專案錄音套件將音檔夾帶至後端。");
   };
 
-  // 🚀 核心：打包 FormData 並請求後端的 scam-ai-core 分析
+  // 核心：發送文字與圖片至後端 API
   const handleSend = async () => {
     const trimmedMessage = message.trim();
 
-    // 防呆：如果沒打字也沒選圖片，就不發送
+    // 如果沒打字也沒選圖片，就不發送
     if (!trimmedMessage && !selectedImage) return;
 
     const timestamp = Date.now().toString();
     const newMessages: ChatMessage[] = [];
 
-    // 1. 如果有選取圖片，先將圖片塞入本地對話紀錄（靠右顯示）
+    // 1. 如果有選圖片，先把圖片塞進前端聊天畫面 (顯示使用者發送)
     if (selectedImage) {
       newMessages.push({
         id: `user-img-${timestamp}`,
@@ -91,7 +91,7 @@ export default function ChatScreen() {
       });
     }
 
-    // 2. 如果有輸入文字，將文字塞入本地對話紀錄（靠右顯示）
+    // 2. 如果有輸入文字，把文字塞進前端聊天畫面 (顯示使用者發送)
     if (trimmedMessage) {
       newMessages.push({
         id: `user-txt-${timestamp}`,
@@ -101,37 +101,36 @@ export default function ChatScreen() {
       });
     }
 
-    // 更新畫面顯示使用者的訊息
+    // 更新畫面顯示使用者剛剛送出的內容
     setMessages((current) => [...current, ...newMessages]);
-
-    // 備份即將發送的圖片，並清空輸入欄與暫存狀態，進入 Loading
-    const imageToSend = selectedImage;
+    
+    // 清空當前輸入狀態，並開啟 Loading 鎖定
+    const imageToSend = selectedImage; // 複製一份拿來打 API
     setMessage("");
     setSelectedImage(null);
     setIsLoading(true);
 
     try {
-      // 3. 建立符合後端 Multer 要求的 multipart/form-data
+      // 3. 建立後端 Multer 認得的 FormData 格式
       const formData = new FormData();
-
+      
       if (trimmedMessage) {
-        formData.append("text", trimmedMessage); // 對應 req.body.text
+        formData.append("text", trimmedMessage);
       }
 
       if (imageToSend) {
         const uriParts = imageToSend.split(".");
-        const fileType = uriParts[uriParts.length - 1]; // 取得檔名後綴
+        const fileType = uriParts[uriParts.length - 1]; // 取得副檔名 (jpg/png)
 
-        // 包裝成 Multer 接收的檔案流格式
-        // @ts-ignore
+        // @ts-ignore (打包 React Native 檔案格式至 FormData)
         formData.append("scamImage", {
           uri: Platform.OS === "android" ? imageToSend : imageToSend.replace("file://", ""),
-          name: `scam_picker.${fileType}`,
+          name: `scam_capture.${fileType}`,
           type: `image/${fileType === "png" ? "png" : "jpeg"}`,
         });
       }
 
-      // 4. 發送請求至後端 index.js -> scam-ai-core.js
+      // 4. 發送請求給 Node.js 後端
       const response = await fetch(BACKEND_URL, {
         method: "POST",
         body: formData,
@@ -142,8 +141,8 @@ export default function ChatScreen() {
 
       const result = await response.json();
 
-      // 5. 成功收到 Gemini 回傳的分析報告，塞入對話紀錄（靠左顯示）
       if (result.success && result.data?.analysisReport) {
+        // 5. 成功拿到 AI 回覆，塞進聊天畫面中
         setMessages((current) => [
           ...current,
           {
@@ -156,9 +155,9 @@ export default function ChatScreen() {
       } else {
         throw new Error(result.message || "分析失敗");
       }
-    } catch (error) {
-      console.error("Scam Core API Error:", error);
-      Alert.alert("分析失敗", "無法連線防詐分析伺服器，請確認網路與後端服務狀態。");
+    } catch (error: any) {
+      console.error("API Error:", error);
+      Alert.alert("連線失敗", "無法連接至防詐伺服器，請檢查網路或後端設定。");
     } finally {
       setIsLoading(false);
     }
@@ -170,7 +169,7 @@ export default function ChatScreen() {
         style={styles.screen}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Header 頂欄 */}
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -179,24 +178,23 @@ export default function ChatScreen() {
           >
             <Ionicons name="chevron-back" size={36} color="#0d0d0d" />
           </TouchableOpacity>
-
           <Text style={styles.headerTitle}>AI防詐聊天室</Text>
           <View style={styles.headerSpacer} />
         </View>
 
-        {/* 聊天對話紀錄滾動區 */}
+        {/* 聊天訊息區 (已清除畫面紅線與重複標籤) */}
         <ScrollView
           style={styles.chatArea}
           contentContainerStyle={styles.chatContent}
           showsVerticalScrollIndicator={false}
-          ref={(ref) => ref?.scrollToEnd({ animated: true })} // 當有新訊息時，自動滾動到底部
+          ref={(ref) => ref?.scrollToEnd({ animated: true })} // 自動捲動到底部
         >
           {messages.map((item) => (
             <View
               key={item.id}
               style={[
                 styles.messageRow,
-                item.sender === "user" ? styles.rowUser : styles.rowAI, // 修正截圖中的重疊錯亂問題，這裡動態決定左右
+                item.sender === "user" ? styles.rowUser : styles.rowAI,
               ]}
             >
               {item.type === "text" ? (
@@ -213,34 +211,33 @@ export default function ChatScreen() {
             </View>
           ))}
 
-          {/* AI 正在思考分析的等待提示 */}
+          {/* AI 正在思考的轉圈圈提示 */}
           {isLoading && (
             <View style={styles.rowAI}>
               <View style={[styles.aiBubble, styles.loadingBubble]}>
-                <ActivityIndicator size="small" color="#397bf2" style={{ marginRight: 8 }} />
-                <Text style={styles.aiBubbleText}>AI 防詐專家正在深度分析中...</Text>
+                <ActivityIndicator size="small" color="#0d0d0d" style={{ marginRight: 8 }} />
+                <Text style={styles.aiBubbleText}>AI 專家正在分析中...</Text>
               </View>
             </View>
           )}
         </ScrollView>
 
-        {/* 挑選圖片後的預覽小框（位於輸入欄上方，可隨時取消） */}
+        {/* 圖片預覽區：如果在相簿選了圖，在輸入框上方跳出小預覽與刪除鈕 */}
         {selectedImage && (
           <View style={styles.previewContainer}>
             <Image source={{ uri: selectedImage }} style={styles.previewImage} />
             <TouchableOpacity style={styles.closePreview} onPress={() => setSelectedImage(null)}>
-              <Ionicons name="close-circle" size={22} color="#ff4d4f" />
+              <Ionicons name="close-circle" size={20} color="#ff4d4f" />
             </TouchableOpacity>
           </View>
         )}
 
-        {/* 下方輸入控制工具列 */}
+        {/* 輸入欄 */}
         <View style={styles.inputBar}>
           <TouchableOpacity
             style={styles.toolButton}
             onPress={handleAttachImage}
             activeOpacity={0.75}
-            disabled={isLoading}
           >
             <Ionicons name="image-outline" size={27} color="#0d0d0d" />
           </TouchableOpacity>
@@ -248,7 +245,7 @@ export default function ChatScreen() {
           <View style={styles.inputBox}>
             <TextInput
               style={styles.input}
-              placeholder={selectedImage ? "已附加圖片，可在此補充對話細節..." : "輸入文字、或上傳圖片..."}
+              placeholder={selectedImage ? "選取了圖片，可在此補充文字描述..." : "輸入文字、或上傳圖片..."}
               placeholderTextColor="#9aa4b2"
               value={message}
               onChangeText={setMessage}
@@ -283,107 +280,3 @@ export default function ChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#ffffff" },
-  screen: { flex: 1, backgroundColor: "#ffffff" },
-  header: {
-    height: 74,
-    backgroundColor: "#ffffff",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 9,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-  },
-  backButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
-  headerTitle: { color: "#111827", fontSize: 18, fontWeight: "500" },
-  headerSpacer: { width: 48 },
-  chatArea: { flex: 1, backgroundColor: "#f8fbff" },
-  chatContent: { paddingHorizontal: 14, paddingTop: 16, paddingBottom: 18 },
-  
-  // 訊息列基本與動態左右靠齊樣式
-  messageRow: { flexDirection: "row", marginBottom: 12 },
-  rowUser: { justifyContent: "flex-end" },
-  rowAI: { justifyContent: "flex-start" },
-
-  // 使用者對話泡泡（藍底白字）
-  userBubble: {
-    maxWidth: "78%",
-    borderRadius: 16,
-    borderBottomRightRadius: 4,
-    backgroundColor: "#397bf2",
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-  },
-  userBubbleText: { color: "#ffffff", fontSize: 14, lineHeight: 20 },
-
-  // AI 專家對話泡泡（白底黑字，帶細灰色邊框）
-  aiBubble: {
-    maxWidth: "78%",
-    borderRadius: 16,
-    borderBottomLeftRadius: 4,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  aiBubbleText: { color: "#1f2937", fontSize: 14, lineHeight: 22 },
-  loadingBubble: { flexDirection: "row", alignItems: "center", backgroundColor: "#f3f4f6" },
-
-  // 圖片對話泡泡容器與樣式
-  imageBubble: {
-    width: 190,
-    height: 190,
-    borderRadius: 16,
-    borderBottomRightRadius: 4,
-    backgroundColor: "#e9eef6",
-    overflow: "hidden",
-  },
-  chatImage: { width: "100%", height: "100%" },
-  
-  // 圖片挑選暫存預覽區樣式
-  previewContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: "#ffffff",
-    borderTopWidth: 1,
-    borderTopColor: "#f1f4f8",
-    alignItems: "center",
-  },
-  previewImage: { width: 55, height: 55, borderRadius: 6 },
-  closePreview: { position: "absolute", top: 2, left: 58 },
-
-  // 下方輸入列樣式
-  inputBar: {
-    minHeight: 56,
-    backgroundColor: "#ffffff",
-    flexDirection: "row",
-    alignItems: "flex-end",
-    paddingHorizontal: 6,
-    paddingTop: 7,
-    paddingBottom: 7,
-    gap: 4,
-    borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
-  },
-  toolButton: { width: 30, height: 40, alignItems: "center", justifyContent: "center" },
-  inputBox: {
-    flex: 1,
-    minHeight: 38,
-    maxHeight: 92,
-    borderRadius: 8,
-    backgroundColor: "#f1f4f8",
-    justifyContent: "center",
-    paddingHorizontal: 10,
-  },
-  input: {
-    color: "#111827",
-    fontSize: 14,
-    lineHeight: 18,
-    paddingVertical: Platform.OS === "ios" ? 9 : 6,
-    textAlignVertical: "center",
-  },
-});
