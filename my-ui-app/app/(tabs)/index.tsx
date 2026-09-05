@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 
+import { scaledTextStyle, useFontSize } from "@/utils/fontSize";
 import { getSavedProfile } from "@/utils/profile";
 
 import { homeStyles as styles } from "../../styles/tabs.styles";
@@ -19,36 +20,30 @@ const quickActions = [
     title: "電話查詢",
     subtitle: "檢查來電風險",
     icon: "call",
-    color: "#4f8df7",
+    color: "#3b82f6",
     route: "/phone-query",
-  },
-  {
-    title: "訊息分析",
-    subtitle: "分析可疑訊息",
-    icon: "chatbubble-ellipses",
-    color: "#6b7cff",
-    route: "/message-query",
   },
   {
     title: "LINE ID 查詢",
     subtitle: "檢查帳號安全性",
     image: require("@/assets/images/line.png"),
-    color: "#20c866",
+    color: "#22c55e",
     route: "/line-query",
+  },
+  {
+    title: "訊息分析",
+    subtitle: "分析可疑訊息",
+    icon: "chatbubble-ellipses",
+    color: "#6366f1",
+    route: "/message-query",
   },
   {
     title: "圖片辨識",
     subtitle: "上傳圖片分析",
     icon: "camera",
-    color: "#3fb7e8",
+    color: "#0ea5e9",
     route: "/(tabs)/chat",
   },
-];
-
-const scams = [
-  { rank: 1, title: "網路購物詐騙", count: 128, icon: "cart", color: "#f25f68" },
-  { rank: 2, title: "假投資詐騙", count: 34, icon: "trending-up", color: "#f5a524" },
-  { rank: 3, title: "假交友投資詐騙", count: 24, icon: "heart", color: "#f7c948" },
 ];
 
 const policeAntiFraudImages = [
@@ -91,10 +86,12 @@ const getRandomAntiFraudImage = (currentImage?: string) => {
 };
 
 export default function HomeScreen() {
+  const { fontSize } = useFontSize();
   const [policeAntiFraudImage, setPoliceAntiFraudImage] = useState(() =>
     getRandomAntiFraudImage()
   );
   const [avatarUri, setAvatarUri] = useState("");
+  const font = (style: any) => scaledTextStyle(style, fontSize);
 
   useEffect(() => {
     policeAntiFraudImages.forEach((image) => {
@@ -128,11 +125,13 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Image
-            source={require("@/assets/images/auth-logo.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
+          <View style={styles.logoWrap}>
+            <Image
+              source={require("@/assets/images/auth-logo.png")}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </View>
 
           <TouchableOpacity
             style={styles.profileButton}
@@ -142,25 +141,24 @@ export default function HomeScreen() {
             {avatarUri ? (
               <Image source={{ uri: avatarUri }} style={styles.profileAvatarImage} />
             ) : (
-              <Ionicons name="person-outline" size={28} color="#1d2738" />
+              <Ionicons name="person-outline" size={27} color="#1d2738" />
             )}
           </TouchableOpacity>
         </View>
 
         <View style={styles.heroCard}>
           <View style={styles.heroTextBlock}>
-            <Text style={styles.heroEyebrow}>AI Shield</Text>
-            <Text style={styles.heroTitle}>遇到可疑訊息，先查再決定</Text>
-            <Text style={styles.heroSubtitle}>電話、LINE、訊息與圖片都能快速檢測風險。</Text>
+            <Text style={[styles.heroTitle, font(styles.heroTitle)]}>AI 智能防詐，守護你的每一通訊息</Text>
+            <Text style={[styles.heroSubtitle, font(styles.heroSubtitle)]}>即時偵測、風險提示，遇到可疑內容先查證。</Text>
           </View>
           <View style={styles.heroIconCircle}>
-            <Ionicons name="shield-checkmark" size={32} color="#2f7df6" />
+            <Ionicons name="shield-checkmark" size={30} color="#2f7df6" />
           </View>
         </View>
 
         <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>快速檢測</Text>
-          <Text style={styles.sectionHint}>選擇你遇到的可疑來源</Text>
+          <Text style={[styles.sectionTitle, font(styles.sectionTitle)]}>快速檢測</Text>
+          <Text style={[styles.sectionHint, font(styles.sectionHint)]}>一鍵進入常用工具</Text>
         </View>
 
         <View style={styles.quickGrid}>
@@ -171,69 +169,63 @@ export default function HomeScreen() {
               onPress={() => item.route && router.push(item.route as never)}
               activeOpacity={0.84}
             >
-              <View style={[styles.quickIconCircle, { backgroundColor: `${item.color}18` }]}>
+              <View style={[styles.quickIconCircle, { backgroundColor: `${item.color}17` }]}>
                 {item.image ? (
                   <Image source={item.image} style={styles.quickImageIcon} resizeMode="contain" />
                 ) : (
-                  <Ionicons name={item.icon as any} size={25} color={item.color} />
+                  <Ionicons name={item.icon as any} size={34} color={item.color} />
                 )}
               </View>
 
-              <Text style={styles.quickTitle}>{item.title}</Text>
-              <Text style={styles.quickSubtitle}>{item.subtitle}</Text>
+              <Text style={[styles.quickTitle, font(styles.quickTitle)]}>{item.title}</Text>
+              <Text style={[styles.quickSubtitle, font(styles.quickSubtitle)]}>{item.subtitle}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <View style={styles.topCard}>
-          <View style={styles.topHeader}>
-            <View>
-              <Text style={styles.topTitle}>常見詐騙 TOP 3</Text>
-              <Text style={styles.topSubtitle}>近期高風險類型整理</Text>
+        <View style={styles.infoGrid}>
+          <TouchableOpacity
+            style={styles.infoCard}
+            onPress={() => router.push("/phone-query" as never)}
+            activeOpacity={0.82}
+          >
+            <View style={styles.infoCardHeader}>
+              <Text style={[styles.infoTitle, font(styles.infoTitle)]}>近期高風險號碼</Text>
+              <Ionicons name="alert-circle-outline" size={20} color="#7d8da6" />
             </View>
-            <Text style={styles.topUnit}>受理數</Text>
-          </View>
+            <View style={styles.infoEmptyState}>
+              <Text style={[styles.infoEmptyText, font(styles.infoEmptyText)]}>暫無新增資料</Text>
+              <Text style={[styles.infoHint, font(styles.infoHint)]}>可先輸入電話查詢</Text>
+            </View>
+          </TouchableOpacity>
 
-          {scams.map((item) => (
-            <View key={item.rank} style={styles.scamRow}>
-              <View style={[styles.rankBadge, { backgroundColor: item.color }]}>
-                <Text style={styles.rankText}>{item.rank}</Text>
+          <TouchableOpacity
+            style={[styles.infoCard, styles.knowledgeCard]}
+            onPress={() => router.push("/(tabs)/explore" as never)}
+            activeOpacity={0.82}
+          >
+            <View style={styles.infoCardHeader}>
+              <Text style={[styles.infoTitle, font(styles.infoTitle)]}>防詐小知識</Text>
+              <Ionicons name="book-outline" size={20} color="#397bf2" />
+            </View>
+            <View style={styles.knowledgeBody}>
+              <Text style={[styles.knowledgeText, font(styles.knowledgeText)]}>假客服、投資群組、釣魚連結都能先學會辨識。</Text>
+              <View style={styles.knowledgeButton}>
+                <Text style={[styles.knowledgeButtonText, font(styles.knowledgeButtonText)]}>立即查看</Text>
               </View>
-
-              <View style={[styles.scamIconCircle, { backgroundColor: `${item.color}1f` }]}>
-                <Ionicons name={item.icon as any} size={20} color={item.color} />
-              </View>
-
-              <Text style={styles.scamName}>{item.title}</Text>
-              <Text style={styles.scamCount}>{item.count}</Text>
             </View>
-          ))}
-        </View>
-
-        <View style={styles.riskCard}>
-          <View style={styles.riskHeader}>
-            <View>
-              <Text style={styles.riskTitle}>近期高風險號碼</Text>
-              <Text style={styles.riskHint}>查詢紀錄與資料庫同步後顯示</Text>
-            </View>
-            <Ionicons name="alert-circle-outline" size={22} color="#8aa4c5" />
-          </View>
-
-          <View style={styles.emptyRiskState}>
-            <Ionicons name="shield-checkmark-outline" size={30} color="#8aa4c5" />
-            <Text style={styles.emptyRiskText}>目前尚無高風險號碼</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.advocacySection}>
           <View style={styles.advocacyHeader}>
             <View>
-              <Text style={styles.advocacyTitle}>防詐宣導</Text>
-              <Text style={styles.advocacySubtitle}>165 公開宣導圖，每次進入自動更換</Text>
+              <Text style={[styles.advocacyTitle, font(styles.advocacyTitle)]}>防詐宣導</Text>
+              <Text style={[styles.advocacySubtitle, font(styles.advocacySubtitle)]}>165 公開宣導圖，每次進入自動更換</Text>
             </View>
 
             <View style={styles.sourceBadge}>
-              <Text style={styles.sourceBadgeText}>165</Text>
+              <Text style={[styles.sourceBadgeText, font(styles.sourceBadgeText)]}>165</Text>
             </View>
           </View>
 

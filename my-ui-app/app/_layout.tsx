@@ -1,9 +1,10 @@
+﻿import { FontSizeProvider } from "@/utils/fontSize";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
 export default function RootLayout() {
   return (
-    <>
+    <FontSizeProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
@@ -18,7 +19,6 @@ export default function RootLayout() {
       </Stack>
 
       <StatusBar style="auto" />
-    </>
+    </FontSizeProvider>
   );
 }
-

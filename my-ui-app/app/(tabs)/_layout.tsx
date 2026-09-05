@@ -1,39 +1,105 @@
-import { Ionicons } from "@expo/vector-icons";
+﻿import { Ionicons } from "@expo/vector-icons";
+import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { Tabs } from "expo-router";
-import React from "react";
-import { StyleSheet, Text, View } from "react-native";
-
-import { HapticTab } from "@/components/haptic-tab";
+import React, { useState } from "react";
+import { Pressable, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 const tabConfig = {
   reports: { label: "通報紀錄", icon: "newspaper-outline" },
   explore: { label: "防詐情報站", icon: "book-outline" },
   index: { label: "首頁", icon: "home-outline" },
   chat: { label: "AI聊天室", icon: "chatbubbles-outline" },
-  profile: { label: "我的資料", icon: "person-outline" },
+  profile: { label: "我的", icon: "person-outline" },
 } as const;
 
-function TabIcon({
-  name,
-  focused,
-}: {
-  name: keyof typeof tabConfig;
-  focused: boolean;
-}) {
-  const item = tabConfig[name];
+const menuOrder: (keyof typeof tabConfig)[] = [
+  "index",
+  "reports",
+  "explore",
+  "chat",
+  "profile",
+];
+
+function HamburgerMenu({ state, navigation }: BottomTabBarProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const currentRouteName = state.routes[state.index]?.name as keyof typeof tabConfig;
+  const currentItem = tabConfig[currentRouteName] ?? tabConfig.index;
+
+  const navigateTo = (name: keyof typeof tabConfig) => {
+    const route = state.routes.find((item) => item.name === name);
+    if (!route) return;
+
+    const event = navigation.emit({
+      type: "tabPress",
+      target: route.key,
+      canPreventDefault: true,
+    });
+
+    if (event.defaultPrevented) return;
+
+    setIsOpen(false);
+    navigation.navigate(route.name);
+  };
 
   return (
-    <View style={styles.tabIconWrap}>
-      <View style={[styles.iconBox, focused && styles.iconBoxActive]}>
-        <Ionicons
-          name={item.icon as keyof typeof Ionicons.glyphMap}
-          size={29}
-          color={focused ? "#111827" : "#111827"}
-        />
-      </View>
-      <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>
-        {item.label}
-      </Text>
+    <View pointerEvents="box-none" style={styles.menuLayer}>
+      {isOpen && (
+        <>
+          <Pressable style={styles.scrim} onPress={() => setIsOpen(false)} />
+          <View style={styles.menuPanel}>
+            <View style={styles.menuHeader}>
+              <View>
+                <Text style={styles.menuTitle}>功能選單</Text>
+                <Text style={styles.menuSubtitle}>選擇要前往的頁面</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setIsOpen(false)}
+                activeOpacity={0.78}
+              >
+                <Ionicons name="close" size={22} color="#627086" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.menuList}>
+              {menuOrder.map((name) => {
+                const item = tabConfig[name];
+                const isActive = name === currentRouteName;
+
+                return (
+                  <TouchableOpacity
+                    key={name}
+                    style={[styles.menuItem, isActive && styles.menuItemActive]}
+                    onPress={() => navigateTo(name)}
+                    activeOpacity={0.82}
+                  >
+                    <View style={[styles.menuIconBox, isActive && styles.menuIconBoxActive]}>
+                      <Ionicons
+                        name={item.icon as keyof typeof Ionicons.glyphMap}
+                        size={23}
+                        color={isActive ? "#ffffff" : "#397bf2"}
+                      />
+                    </View>
+                    <Text style={[styles.menuItemText, isActive && styles.menuItemTextActive]}>
+                      {item.label}
+                    </Text>
+                    {isActive && <Ionicons name="checkmark" size={19} color="#397bf2" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </>
+      )}
+
+      <TouchableOpacity
+        style={styles.floatingMenuButton}
+        onPress={() => setIsOpen((open) => !open)}
+        activeOpacity={0.84}
+      >
+        <Ionicons name={isOpen ? "close" : "menu"} size={28} color="#ffffff" />
+        <Text style={styles.floatingMenuLabel}>{currentItem.label}</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -42,92 +108,130 @@ export default function TabLayout() {
   return (
     <Tabs
       initialRouteName="index"
+      tabBar={(props) => <HamburgerMenu {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarButton: HapticTab,
-        tabBarShowLabel: false,
-        tabBarStyle: styles.tabBar,
-        tabBarItemStyle: styles.tabItem,
       }}
     >
-      <Tabs.Screen
-        name="reports"
-        options={{
-          title: tabConfig.reports.label,
-          tabBarIcon: ({ focused }) => <TabIcon name="reports" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="explore"
-        options={{
-          title: tabConfig.explore.label,
-          tabBarIcon: ({ focused }) => <TabIcon name="explore" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: tabConfig.index.label,
-          tabBarIcon: ({ focused }) => <TabIcon name="index" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="chat"
-        options={{
-          title: tabConfig.chat.label,
-          tabBarIcon: ({ focused }) => <TabIcon name="chat" focused={focused} />,
-          tabBarStyle: { display: "none" },
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: tabConfig.profile.label,
-          tabBarIcon: ({ focused }) => <TabIcon name="profile" focused={focused} />,
-        }}
-      />
+      <Tabs.Screen name="reports" options={{ title: tabConfig.reports.label }} />
+      <Tabs.Screen name="explore" options={{ title: tabConfig.explore.label }} />
+      <Tabs.Screen name="index" options={{ title: tabConfig.index.label }} />
+      <Tabs.Screen name="chat" options={{ title: tabConfig.chat.label }} />
+      <Tabs.Screen name="profile" options={{ title: tabConfig.profile.label }} />
     </Tabs>
   );
 }
 
 const styles = StyleSheet.create({
-  tabBar: {
-    height: 62,
+  menuLayer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "flex-end",
+    pointerEvents: "box-none",
+  },
+  scrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15, 23, 42, 0.26)",
+  },
+  menuPanel: {
+    marginHorizontal: 14,
+    marginBottom: 86,
+    borderRadius: 22,
     backgroundColor: "#ffffff",
-    borderTopWidth: 1,
-    borderTopColor: "#eef2f7",
-    paddingTop: 5,
-    paddingBottom: 4,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 12,
+    shadowColor: "#64748b",
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 10,
   },
-  tabItem: {
+  menuHeader: {
+    minHeight: 48,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
   },
-  tabIconWrap: {
-    width: 60,
-    height: 53,
-    alignItems: "center",
-    justifyContent: "center",
+  menuTitle: {
+    color: "#111827",
+    fontSize: 17,
+    fontWeight: "900",
   },
-  iconBox: {
-    width: 36,
-    height: 30,
-    borderRadius: 5,
-    alignItems: "center",
-    justifyContent: "center",
+  menuSubtitle: {
+    color: "#8a97a8",
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 3,
   },
-  iconBoxActive: {
+  closeButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
   },
-  tabLabel: {
-    color: "#7b8794",
-    fontSize: 9,
-    lineHeight: 13,
-    marginTop: 1,
+  menuList: {
+    gap: 8,
   },
-  tabLabelActive: {
+  menuItem: {
+    minHeight: 58,
+    borderRadius: 16,
+    backgroundColor: "#f8fbff",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+  },
+  menuItemActive: {
+    backgroundColor: "#e8f1ff",
+    borderWidth: 1,
+    borderColor: "#cfe0ff",
+  },
+  menuIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    backgroundColor: "#edf4ff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  menuIconBoxActive: {
+    backgroundColor: "#397bf2",
+  },
+  menuItemText: {
+    flex: 1,
+    color: "#223047",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  menuItemTextActive: {
     color: "#397bf2",
-    fontWeight: "700",
+    fontWeight: "900",
+  },
+  floatingMenuButton: {
+    position: "absolute",
+    right: 16,
+    bottom: 22,
+    height: 54,
+    minWidth: 116,
+    borderRadius: 27,
+    backgroundColor: "#397bf2",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  floatingMenuLabel: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "900",
+    marginLeft: 7,
   },
 });
-
