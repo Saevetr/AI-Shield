@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import {
   Image,
   SafeAreaView,
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -13,41 +12,43 @@ import {
 
 import { getSavedProfile } from "@/utils/profile";
 
+import { homeStyles as styles } from "../../styles/tabs.styles";
+
 const quickActions = [
   {
     title: "電話查詢",
     subtitle: "檢查來電風險",
     icon: "call",
-    color: "#72a7ff",
+    color: "#4f8df7",
     route: "/phone-query",
   },
   {
     title: "訊息分析",
     subtitle: "分析可疑訊息",
     icon: "chatbubble-ellipses",
-    color: "#72a7ff",
+    color: "#6b7cff",
     route: "/message-query",
   },
   {
     title: "LINE ID 查詢",
     subtitle: "檢查帳號安全性",
     image: require("@/assets/images/line.png"),
-    color: "#22c55e",
+    color: "#20c866",
     route: "/line-query",
   },
   {
     title: "圖片辨識",
     subtitle: "上傳圖片分析",
     icon: "camera",
-    color: "#72a7ff",
+    color: "#3fb7e8",
     route: "/(tabs)/chat",
   },
 ];
 
 const scams = [
-  { rank: 1, title: "網路購物詐騙", count: 128, icon: "cart", color: "#ff6b6b" },
-  { rank: 2, title: "假投資詐騙", count: 34, icon: "trending-up", color: "#ff9f43" },
-  { rank: 3, title: "假交友(投資詐財)詐騙", count: 24, icon: "heart", color: "#ffc533" },
+  { rank: 1, title: "網路購物詐騙", count: 128, icon: "cart", color: "#f25f68" },
+  { rank: 2, title: "假投資詐騙", count: 34, icon: "trending-up", color: "#f5a524" },
+  { rank: 3, title: "假交友投資詐騙", count: 24, icon: "heart", color: "#f7c948" },
 ];
 
 const policeAntiFraudImages = [
@@ -128,7 +129,7 @@ export default function HomeScreen() {
       >
         <View style={styles.header}>
           <Image
-            source={require("@/assets/images/logo.png")}
+            source={require("@/assets/images/auth-logo.png")}
             style={styles.logo}
             resizeMode="contain"
           />
@@ -136,22 +137,31 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={styles.profileButton}
             onPress={() => router.push("/(tabs)/profile")}
-            activeOpacity={0.75}
+            activeOpacity={0.78}
           >
             {avatarUri ? (
               <Image source={{ uri: avatarUri }} style={styles.profileAvatarImage} />
             ) : (
-              <Ionicons name="person-outline" size={34} color="#0d0d0d" />
+              <Ionicons name="person-outline" size={28} color="#1d2738" />
             )}
           </TouchableOpacity>
         </View>
 
         <View style={styles.heroCard}>
-          <Text style={styles.heroTitle}>AI 智能防詐，守護你的每一通訊息</Text>
-          <Text style={styles.heroSubtitle}>即時偵測，邏輯風險，保護你我</Text>
+          <View style={styles.heroTextBlock}>
+            <Text style={styles.heroEyebrow}>AI Shield</Text>
+            <Text style={styles.heroTitle}>遇到可疑訊息，先查再決定</Text>
+            <Text style={styles.heroSubtitle}>電話、LINE、訊息與圖片都能快速檢測風險。</Text>
+          </View>
+          <View style={styles.heroIconCircle}>
+            <Ionicons name="shield-checkmark" size={32} color="#2f7df6" />
+          </View>
         </View>
 
-        <Text style={styles.sectionTitle}>快速檢測</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>快速檢測</Text>
+          <Text style={styles.sectionHint}>選擇你遇到的可疑來源</Text>
+        </View>
 
         <View style={styles.quickGrid}>
           {quickActions.map((item) => (
@@ -159,13 +169,13 @@ export default function HomeScreen() {
               key={item.title}
               style={styles.quickCard}
               onPress={() => item.route && router.push(item.route as never)}
-              activeOpacity={0.82}
+              activeOpacity={0.84}
             >
-              <View style={[styles.quickIconCircle, { backgroundColor: `${item.color}1f` }]}>
+              <View style={[styles.quickIconCircle, { backgroundColor: `${item.color}18` }]}>
                 {item.image ? (
                   <Image source={item.image} style={styles.quickImageIcon} resizeMode="contain" />
                 ) : (
-                  <Ionicons name={item.icon as any} size={27} color={item.color} />
+                  <Ionicons name={item.icon as any} size={25} color={item.color} />
                 )}
               </View>
 
@@ -177,8 +187,11 @@ export default function HomeScreen() {
 
         <View style={styles.topCard}>
           <View style={styles.topHeader}>
-            <Text style={styles.topTitle}>最常見詐騙手法 TOP 3</Text>
-            <Text style={styles.topTitle}>受理數(件)</Text>
+            <View>
+              <Text style={styles.topTitle}>常見詐騙 TOP 3</Text>
+              <Text style={styles.topSubtitle}>近期高風險類型整理</Text>
+            </View>
+            <Text style={styles.topUnit}>受理數</Text>
           </View>
 
           {scams.map((item) => (
@@ -187,8 +200,8 @@ export default function HomeScreen() {
                 <Text style={styles.rankText}>{item.rank}</Text>
               </View>
 
-              <View style={[styles.scamIconCircle, { backgroundColor: `${item.color}22` }]}>
-                <Ionicons name={item.icon as any} size={22} color={item.color} />
+              <View style={[styles.scamIconCircle, { backgroundColor: `${item.color}1f` }]}>
+                <Ionicons name={item.icon as any} size={20} color={item.color} />
               </View>
 
               <Text style={styles.scamName}>{item.title}</Text>
@@ -199,21 +212,24 @@ export default function HomeScreen() {
 
         <View style={styles.riskCard}>
           <View style={styles.riskHeader}>
-            <Text style={styles.riskTitle}>近期高風險號碼</Text>
-            <Text style={styles.riskHint}>165 高風險通報整理</Text>
+            <View>
+              <Text style={styles.riskTitle}>近期高風險號碼</Text>
+              <Text style={styles.riskHint}>查詢紀錄與資料庫同步後顯示</Text>
+            </View>
+            <Ionicons name="alert-circle-outline" size={22} color="#8aa4c5" />
           </View>
 
           <View style={styles.emptyRiskState}>
-            <Ionicons name="shield-checkmark-outline" size={32} color="#8aa4c5" />
-            <Text style={styles.emptyRiskText}>尚無新的高風險號碼</Text>
+            <Ionicons name="shield-checkmark-outline" size={30} color="#8aa4c5" />
+            <Text style={styles.emptyRiskText}>目前尚無高風險號碼</Text>
           </View>
         </View>
 
         <View style={styles.advocacySection}>
           <View style={styles.advocacyHeader}>
             <View>
-              <Text style={styles.advocacyTitle}>警政署防詐宣導</Text>
-              <Text style={styles.advocacySubtitle}>取自 165 打詐儀錶板下載區</Text>
+              <Text style={styles.advocacyTitle}>防詐宣導</Text>
+              <Text style={styles.advocacySubtitle}>165 公開宣導圖，每次進入自動更換</Text>
             </View>
 
             <View style={styles.sourceBadge}>
@@ -234,240 +250,3 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#f8fbff",
-  },
-  container: {
-    flex: 1,
-    backgroundColor: "#f8fbff",
-  },
-  content: {
-    paddingHorizontal: 15,
-    paddingTop: 10,
-    paddingBottom: 54,
-  },
-  header: {
-    height: 68,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  logo: {
-    width: 102,
-    height: 58,
-  },
-  profileButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  profileAvatarImage: {
-    width: "100%",
-    height: "100%",
-  },
-  heroCard: {
-    minHeight: 70,
-    borderRadius: 14,
-    backgroundColor: "#dceafe",
-    justifyContent: "center",
-    paddingHorizontal: 14,
-    marginTop: 8,
-    marginBottom: 17,
-  },
-  heroTitle: {
-    color: "#2f62b9",
-    fontSize: 14,
-    fontWeight: "800",
-    marginBottom: 4,
-  },
-  heroSubtitle: {
-    color: "#6c86aa",
-    fontSize: 12,
-  },
-  sectionTitle: {
-    color: "#111827",
-    fontSize: 13,
-    fontWeight: "700",
-    marginLeft: 4,
-    marginBottom: 8,
-  },
-  quickGrid: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 18,
-  },
-  quickCard: {
-    flex: 1,
-    height: 78,
-    borderRadius: 13,
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    paddingTop: 9,
-  },
-  quickIconCircle: {
-    width: 35,
-    height: 35,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 5,
-  },
-  quickImageIcon: {
-    width: 25,
-    height: 25,
-  },
-  quickTitle: {
-    color: "#1f2937",
-    fontSize: 11,
-    fontWeight: "800",
-    textAlign: "center",
-  },
-  quickSubtitle: {
-    color: "#9aa4b2",
-    fontSize: 8,
-    marginTop: 2,
-    textAlign: "center",
-  },
-  topCard: {
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 19,
-    paddingTop: 17,
-    paddingBottom: 18,
-    marginBottom: 16,
-  },
-  topHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  topTitle: {
-    color: "#111827",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  scamRow: {
-    height: 35,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  rankBadge: {
-    width: 14,
-    height: 14,
-    borderRadius: 3,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 9,
-  },
-  rankText: {
-    color: "#ffffff",
-    fontSize: 8,
-    fontWeight: "900",
-  },
-  scamIconCircle: {
-    width: 29,
-    height: 29,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 8,
-  },
-  scamName: {
-    flex: 1,
-    color: "#111827",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  scamCount: {
-    width: 42,
-    color: "#111827",
-    fontSize: 16,
-    textAlign: "right",
-  },
-  riskCard: {
-    minHeight: 132,
-    borderRadius: 14,
-    backgroundColor: "#ffffff",
-    paddingHorizontal: 15,
-    paddingTop: 14,
-    paddingBottom: 16,
-    marginBottom: 16,
-  },
-  riskHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  riskTitle: {
-    color: "#111827",
-    fontSize: 13,
-    fontWeight: "800",
-  },
-  riskHint: {
-    color: "#8a97a8",
-    fontSize: 10,
-  },
-  emptyRiskState: {
-    flex: 1,
-    minHeight: 82,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  emptyRiskText: {
-    color: "#8a97a8",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  advocacySection: {
-    borderRadius: 16,
-    backgroundColor: "#ffffff",
-    padding: 12,
-    marginBottom: 0,
-  },
-  advocacyHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  advocacyTitle: {
-    color: "#111827",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-  advocacySubtitle: {
-    color: "#8a97a8",
-    fontSize: 10,
-    marginTop: 2,
-  },
-  sourceBadge: {
-    width: 38,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#dceafe",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  sourceBadgeText: {
-    color: "#397bf2",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  advocacyImageCard: {
-    height: 250,
-    borderRadius: 13,
-    backgroundColor: "#f3f7fd",
-    overflow: "hidden",
-  },
-  advocacyImage: {
-    width: "100%",
-    height: "100%",
-  },
-});
