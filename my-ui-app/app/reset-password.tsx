@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,7 +17,7 @@ import {
 
 import { auth } from "@/app/config/firebase";
 
-import { resetPasswordStyles as styles } from "./styles";
+import { resetPasswordStyles as styles } from "../styles/app.styles";
 
 export default function ResetPasswordScreen() {
   const params = useLocalSearchParams<{
@@ -248,4 +248,5 @@ export default function ResetPasswordScreen() {
     </View>
   );
 }
+
 
