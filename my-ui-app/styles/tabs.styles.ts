@@ -1,46 +1,56 @@
-﻿import { Platform ,StyleSheet } from "react-native";
+import { Platform ,StyleSheet } from "react-native";
 
 export const tabLayoutStyles = StyleSheet.create({
   tabBar: {
-    height: 62,
+    height: Platform.OS === "ios" ? 88 : 84,
     backgroundColor: "#ffffff",
     borderTopWidth: 1,
-    borderTopColor: "#eef2f7",
-    paddingTop: 5,
-    paddingBottom: 4,
+    borderTopColor: "#dbe5f1",
+    paddingTop: 16,
+    paddingBottom: Platform.OS === "ios" ? 12 : 8,
+    shadowColor: "#64748b",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 10,
   },
   tabItem: {
     alignItems: "center",
     justifyContent: "center",
   },
   tabIconWrap: {
-    width: 60,
-    height: 53,
+    width: 104,
+    minHeight: 68,
     alignItems: "center",
     justifyContent: "center",
   },
   iconBox: {
-    width: 36,
-    height: 30,
-    borderRadius: 5,
+    width: 50,
+    height: 42,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "transparent",
+    backgroundColor: "transparent",
   },
   iconBoxActive: {
-    backgroundColor: "#f1f5f9",
+    backgroundColor: "#edf5ff",
+    borderColor: "#397bf2",
   },
   tabLabel: {
-    color: "#7b8794",
-    fontSize: 9,
-    lineHeight: 13,
-    marginTop: 1,
+    color: "#607083",
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2,
+    fontWeight: "800",
+    textAlign: "center",
   },
   tabLabelActive: {
     color: "#397bf2",
-    fontWeight: "700",
+    fontWeight: "900",
   },
 });
-
 export const chatStyles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#ffffff" },
   screen: { flex: 1, backgroundColor: "#ffffff" },
@@ -1796,4 +1806,9 @@ export const reportsStyles = StyleSheet.create({
     lineHeight: 18,
   },
 });
+
+
+
+
+
 

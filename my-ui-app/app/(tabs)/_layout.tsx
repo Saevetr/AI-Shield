@@ -8,8 +8,6 @@ import { HapticTab } from "@/components/haptic-tab";
 import { tabLayoutStyles as styles } from "../../styles/tabs.styles";
 
 const tabConfig = {
-  reports: { label: "通報紀錄", icon: "newspaper-outline" },
-  explore: { label: "防詐情報站", icon: "book-outline" },
   index: { label: "首頁", icon: "home-outline" },
   chat: { label: "AI聊天室", icon: "chatbubbles-outline" },
   profile: { label: "我的資料", icon: "person-outline" },
@@ -29,8 +27,8 @@ function TabIcon({
       <View style={[styles.iconBox, focused && styles.iconBoxActive]}>
         <Ionicons
           name={item.icon as keyof typeof Ionicons.glyphMap}
-          size={29}
-          color={focused ? "#111827" : "#111827"}
+          size={30}
+          color={focused ? "#397bf2" : "#4b5563"}
         />
       </View>
       <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>
@@ -55,22 +53,15 @@ export default function TabLayout() {
       <Tabs.Screen
         name="reports"
         options={{
-          title: tabConfig.reports.label,
-          tabBarIcon: ({ focused }) => <TabIcon name="reports" focused={focused} />,
+          href: null,
+          title: "通報紀錄",
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
-          title: tabConfig.explore.label,
-          tabBarIcon: ({ focused }) => <TabIcon name="explore" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: tabConfig.index.label,
-          tabBarIcon: ({ focused }) => <TabIcon name="index" focused={focused} />,
+          href: null,
+          title: "防詐情報站",
         }}
       />
       <Tabs.Screen
@@ -79,6 +70,13 @@ export default function TabLayout() {
           title: tabConfig.chat.label,
           tabBarIcon: ({ focused }) => <TabIcon name="chat" focused={focused} />,
           tabBarStyle: { display: "none" },
+        }}
+      />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: tabConfig.index.label,
+          tabBarIcon: ({ focused }) => <TabIcon name="index" focused={focused} />,
         }}
       />
       <Tabs.Screen
@@ -91,5 +89,4 @@ export default function TabLayout() {
     </Tabs>
   );
 }
-
 

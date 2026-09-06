@@ -1,4 +1,4 @@
-﻿import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import {
@@ -67,6 +67,11 @@ export default function ProfileScreen() {
       icon: "ban-outline",
       label: "我的黑名單",
       onPress: () => router.push("/blacklist" as never),
+    },    {
+      description: "查看曾經提交的通報內容",
+      icon: "newspaper-outline",
+      label: "通報紀錄",
+      onPress: () => router.push("/(tabs)/reports" as never),
     },
     {
       badge: "VIP",
@@ -541,3 +546,4 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 });
+
