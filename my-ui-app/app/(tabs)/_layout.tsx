@@ -5,7 +5,7 @@ import { Text, View } from "react-native";
 
 import { HapticTab } from "@/components/haptic-tab";
 
-import { tabLayoutStyles as styles } from "./tabs.styles";
+import { tabLayoutStyles as styles } from "../../styles/tabs.styles";
 
 const tabConfig = {
   reports: { label: "通報紀錄", icon: "newspaper-outline" },
@@ -91,4 +91,5 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
 
