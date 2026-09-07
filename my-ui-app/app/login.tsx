@@ -34,7 +34,7 @@ export default function Login() {
     return (
       globalObject?.location?.origin ||
       process.env.EXPO_PUBLIC_FRONTEND_URL ||
-      "http://localhost:8082"
+      "https://maipianaishield-d61c7.web.app"
     );
   };
 
@@ -121,8 +121,7 @@ export default function Login() {
       });
 
       if (Platform.OS === "web") {
-        const result = await signInWithPopup(auth, provider);
-        await finishGoogleLogin(result.user);
+        await signInWithRedirect(auth, provider);
         return;
       }
 
@@ -286,9 +285,10 @@ export default function Login() {
           />
         </View>
 
-        <View style={styles.dividerRow}>
+                <View style={styles.dividerRow}>
           <View style={styles.line} />
-<Text style={styles.welcome}>歡迎回來！</Text>          <View style={styles.line} />
+          <Text style={styles.welcome}>歡迎回來！</Text>
+          <View style={styles.line} />
         </View>
 
         <Text style={styles.subtitle}>請輸入您的帳號密碼登入</Text>
@@ -743,6 +743,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+
+
+
+
+
+
 
 
 
