@@ -6,7 +6,7 @@ import { getFirestore } from "firebase/firestore";
 // Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyCqbG_5E4N2gjIDzwl0W70V-OxpXSAr1fI",
-  authDomain: "maipianaishield-d61c7.firebaseapp.com",
+  authDomain: "maipianaishield-d61c7.web.app",
   projectId: "maipianaishield-d61c7",
   storageBucket: "maipianaishield-d61c7.firebasestorage.app",
   messagingSenderId: "99083038415",
@@ -21,3 +21,4 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export default function DummyComponent() { return null; }
+
