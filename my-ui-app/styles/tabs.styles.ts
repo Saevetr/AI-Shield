@@ -1068,20 +1068,20 @@ export const homeStyles = StyleSheet.create({
     paddingBottom: 88,
   },
   header: {
-    height: 52,
+    height: 66,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 10,
   },
   logoWrap: {
-    width: 134,
-    height: 46,
+    width: 148,
+    height: 62,
     justifyContent: "center",
   },
   logo: {
-    width: 120,
-    height: 42,
+    width: 136,
+    height: 82,
   },
   profileButton: {
     width: 42,

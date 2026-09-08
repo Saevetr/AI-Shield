@@ -272,15 +272,9 @@ export default function Login() {
   return (
     <ScrollView contentContainerStyle={styles.scrollContent}>
       <View style={styles.container}>
-        <Image
-          source={require("@/assets/images/hexagon.png")}
-          style={styles.hexagonBg}
-          resizeMode="contain"
-        />
-
         <View style={styles.logoContainer}>
           <Image
-            source={require("@/assets/images/auth-logo.png")}
+            source={require("@/assets/images/logo.png")}
             style={styles.logo}
             resizeMode="contain"
           />
@@ -288,7 +282,8 @@ export default function Login() {
 
         <View style={styles.dividerRow}>
           <View style={styles.line} />
-<Text style={styles.welcome}>歡迎回來！</Text>          <View style={styles.line} />
+          <Text style={styles.welcome}>歡迎回來！</Text>
+          <View style={styles.line} />
         </View>
 
         <Text style={styles.subtitle}>請輸入您的帳號密碼登入</Text>
@@ -479,12 +474,12 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 18,
-    marginBottom: 10,
+    marginTop: 26,
+    marginBottom: 18,
   },
   logo: {
-    width: 250,
-    height: 160,
+    width: 226,
+    height: 138,
   },
   dividerRow: {
     flexDirection: "row",
@@ -621,15 +616,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#2f62b9",
     fontWeight: "800",
-  },
-  hexagonBg: {
-    position: "absolute",
-    left: 0,
-    bottom: -50,
-    width: 300,
-    height: 300,
-    opacity: 0.32,
-    zIndex: 0,
   },
   patternText: {
     color: "#8aa4c5",

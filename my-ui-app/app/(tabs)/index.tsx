@@ -127,7 +127,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View style={styles.logoWrap}>
             <Image
-              source={require("@/assets/images/auth-logo.png")}
+              source={require("@/assets/images/logo.png")}
               style={styles.logo}
               resizeMode="contain"
             />

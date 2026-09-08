@@ -129,15 +129,9 @@ export default function ResetPasswordScreen() {
 
   return (
     <View style={styles.container}>
-        <Image
-          source={require("@/assets/images/hexagon.png")}
-          style={styles.hexagonBg}
-          resizeMode="contain"
-        />
-
         <View style={styles.logoContainer}>
           <Image
-            source={require("@/assets/images/auth-logo.png")}
+            source={require("@/assets/images/logo.png")}
             style={styles.logo}
             resizeMode="contain"
           />

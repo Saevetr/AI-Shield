@@ -2107,12 +2107,12 @@ export const resetPasswordStyles = StyleSheet.create({
   logoContainer: {
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 18,
-    marginBottom: 18,
+    marginTop: 26,
+    marginBottom: 20,
   },
   logo: {
-    width: 250,
-    height: 160,
+    width: 226,
+    height: 138,
   },
   card: {
     borderRadius: 18,
@@ -2267,14 +2267,5 @@ export const resetPasswordStyles = StyleSheet.create({
     color: "#2f62b9",
     fontSize: 16,
     fontWeight: "700",
-  },
-  hexagonBg: {
-    position: "absolute",
-    left: 0,
-    bottom: -50,
-    width: 300,
-    height: 300,
-    opacity: 0.32,
-    zIndex: 0,
   },
 });
