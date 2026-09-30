@@ -13,7 +13,7 @@ import {
 } from "react-native";
 
 import { logout } from "@/utils/auth";
-import { FONT_SIZE_OPTIONS, scaledTextStyle, useFontSize } from "@/utils/fontSize";
+import { FONT_SIZE_OPTIONS, useFontSize } from "@/utils/fontSize";
 import { DEFAULT_PROFILE, getSavedProfile } from "@/utils/profile";
 
 type MenuRow = {
@@ -32,7 +32,6 @@ const showComingSoon = (title: string) => {
 export default function ProfileScreen() {
   const [profile, setProfile] = useState(DEFAULT_PROFILE);
   const { fontSize, setFontSize } = useFontSize();
-  const font = (style: any) => scaledTextStyle(style, fontSize);
 
   useFocusEffect(
     useCallback(() => {
@@ -105,7 +104,7 @@ export default function ProfileScreen() {
         >
           <Ionicons name="chevron-back" size={34} color="#0d0d0d" />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, font(styles.headerTitle)]}>我的資料</Text>
+        <Text style={styles.headerTitle}>我的資料</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -127,24 +126,24 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.profileInfo}>
-            <Text style={[styles.name, font(styles.name)]}>{profile.name}</Text>
-            <Text style={[styles.phone, font(styles.phone)]}>{profile.phone}</Text>
+            <Text style={styles.name}>{profile.name}</Text>
+            <Text style={styles.phone}>{profile.phone}</Text>
             <View style={styles.statusPill}>
               <Ionicons name="shield-checkmark" size={14} color="#397bf2" />
-              <Text style={[styles.statusText, font(styles.statusText)]}>帳號保護中</Text>
+              <Text style={styles.statusText}>帳號保護中</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.summaryRow}>
           <View style={styles.summaryItem}>
-            <Text style={[styles.summaryNumber, font(styles.summaryNumber)]}>5</Text>
-            <Text style={[styles.summaryLabel, font(styles.summaryLabel)]}>黑名單</Text>
+            <Text style={styles.summaryNumber}>5</Text>
+            <Text style={styles.summaryLabel}>黑名單</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
-            <Text style={[styles.summaryNumber, font(styles.summaryNumber)]}>--</Text>
-            <Text style={[styles.summaryLabel, font(styles.summaryLabel)]}>優惠券</Text>
+            <Text style={styles.summaryNumber}>--</Text>
+            <Text style={styles.summaryLabel}>優惠券</Text>
           </View>
         </View>
 
@@ -154,8 +153,8 @@ export default function ProfileScreen() {
               <Ionicons name="text-outline" size={19} color="#397bf2" />
             </View>
             <View style={styles.fontSizeTextWrap}>
-              <Text style={[styles.fontSizeTitle, font(styles.fontSizeTitle)]}>字體大小</Text>
-              <Text style={[styles.fontSizeHint, font(styles.fontSizeHint)]}>依照閱讀習慣調整文字</Text>
+              <Text style={styles.fontSizeTitle}>字體大小</Text>
+              <Text style={styles.fontSizeHint}>依照閱讀習慣調整文字</Text>
             </View>
           </View>
 
@@ -174,7 +173,6 @@ export default function ProfileScreen() {
                     style={[
                       styles.fontSizeOptionText,
                       isActive && styles.fontSizeOptionTextActive,
-                      font(styles.fontSizeOptionText),
                     ]}
                   >
                     {option.label}
@@ -190,8 +188,8 @@ export default function ProfileScreen() {
             <Ionicons name="sparkles-outline" size={19} color="#397bf2" />
           </View>
           <View style={styles.noticeTextWrap}>
-            <Text style={[styles.noticeTitle, font(styles.noticeTitle)]}>防詐守護方案</Text>
-            <Text style={[styles.noticeText, font(styles.noticeText)]}>完成個人資料後，可獲得更精準的提醒與服務。</Text>
+            <Text style={styles.noticeTitle}>防詐守護方案</Text>
+            <Text style={styles.noticeText}>完成個人資料後，可獲得更精準的提醒與服務。</Text>
           </View>
         </View>
 
@@ -222,7 +220,6 @@ export default function ProfileScreen() {
                     style={[
                       styles.menuTitle,
                       row.tone === "danger" && styles.menuTitleDanger,
-                      font(styles.menuTitle),
                     ]}
                   >
                     {row.label}
@@ -234,11 +231,11 @@ export default function ProfileScreen() {
                         row.badge === "VIP" && styles.vipBadge,
                       ]}
                     >
-                      <Text style={[styles.badgeText, font(styles.badgeText)]}>{row.badge}</Text>
+                      <Text style={styles.badgeText}>{row.badge}</Text>
                     </View>
                   )}
                 </View>
-                <Text style={[styles.menuDescription, font(styles.menuDescription)]}>{row.description}</Text>
+                <Text style={styles.menuDescription}>{row.description}</Text>
               </View>
 
               {row.tone !== "danger" && (

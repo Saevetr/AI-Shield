@@ -13,7 +13,6 @@ import {
   View,
 } from "react-native";
 
-import { scaledTextStyle, useFontSize } from "@/utils/fontSize";
 import { riskQueryStyles as styles } from "../styles/app.styles";
 
 type QueryMode = "phone" | "line";
@@ -80,7 +79,6 @@ export default function RiskQueryScreen() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [records, setRecords] = useState<QueryResult[]>([]);
-  const { fontSize } = useFontSize();
 
   const value = mode === "phone" ? phone : lineId;
   const setValue = mode === "phone" ? setPhone : setLineId;
@@ -88,7 +86,6 @@ export default function RiskQueryScreen() {
     () => records.filter((record) => record.kind === mode),
     [mode, records]
   );
-  const font = (style: any) => scaledTextStyle(style, fontSize);
 
   const changeMode = (nextMode: QueryMode) => {
     Keyboard.dismiss();
@@ -250,7 +247,7 @@ export default function RiskQueryScreen() {
             <Ionicons name="chevron-back" size={28} color="#182235" />
           </TouchableOpacity>
           <View style={styles.headerText}>
-            <Text style={[styles.headerTitle, font(styles.headerTitle)]}>風險查詢</Text>
+            <Text style={styles.headerTitle}>風險查詢</Text>
           </View>
           <View style={styles.headerSpacer} />
         </View>
@@ -275,7 +272,6 @@ export default function RiskQueryScreen() {
               <Text
                 style={[
                   styles.segmentText,
-                  font(styles.segmentText),
                   mode === "phone" && styles.segmentTextActive,
                 ]}
               >
@@ -296,7 +292,6 @@ export default function RiskQueryScreen() {
               <Text
                 style={[
                   styles.segmentText,
-                  font(styles.segmentText),
                   mode === "line" && styles.segmentTextActive,
                 ]}
               >
@@ -315,10 +310,10 @@ export default function RiskQueryScreen() {
                 />
               </View>
               <View style={styles.queryHeadingText}>
-                <Text style={[styles.queryTitle, font(styles.queryTitle)]}>
+                <Text style={styles.queryTitle}>
                   {mode === "phone" ? "查詢電話號碼" : "查詢 LINE ID"}
                 </Text>
-                <Text style={[styles.queryDescription, font(styles.queryDescription)]}>
+                <Text style={styles.queryDescription}>
                   {mode === "phone"
                     ? "市話、手機與國際格式皆可輸入"
                     : "輸入對方的 LINE ID 檢查風險"}
@@ -333,7 +328,7 @@ export default function RiskQueryScreen() {
                 color="#7186a4"
               />
               <TextInput
-                style={[styles.input, font(styles.input)]}
+                style={styles.input}
                 value={value}
                 onChangeText={setValue}
                 placeholder={mode === "phone" ? "請輸入電話號碼" : "請輸入完整 LINE ID"}
@@ -358,7 +353,7 @@ export default function RiskQueryScreen() {
               activeOpacity={0.84}
             >
               {loading ? <ActivityIndicator color="#ffffff" /> : <Ionicons name="search" size={22} color="#ffffff" />}
-              <Text style={[styles.queryButtonText, font(styles.queryButtonText)]}>
+              <Text style={styles.queryButtonText}>
                 {loading ? "查詢中" : "立即查詢"}
               </Text>
             </TouchableOpacity>
@@ -366,7 +361,7 @@ export default function RiskQueryScreen() {
 
           <View style={styles.tipCard}>
             <Ionicons name="information-circle" size={24} color="#397bf2" />
-            <Text style={[styles.tipText, font(styles.tipText)]}>
+            <Text style={styles.tipText}>
               {mode === "phone"
                 ? "查不到紀錄不代表完全安全，陌生來電仍不要提供個資或驗證碼。"
                 : "陌生帳號要求匯款、加入投資群或購買點數時，請先確認身分。"}
@@ -375,44 +370,44 @@ export default function RiskQueryScreen() {
 
           {result && palette ? (
             <View style={styles.resultSection}>
-              <Text style={[styles.sectionTitle, font(styles.sectionTitle)]}>查詢結果</Text>
+              <Text style={styles.sectionTitle}>查詢結果</Text>
               <View style={[styles.riskBanner, { backgroundColor: palette.background }]}>
                 <View style={[styles.riskIcon, { backgroundColor: `${palette.color}18` }]}>
                   <Ionicons name={palette.icon} size={32} color={palette.color} />
                 </View>
                 <View style={styles.riskText}>
-                  <Text style={[styles.riskLabel, font(styles.riskLabel), { color: palette.color }]}>
+                  <Text style={[styles.riskLabel, { color: palette.color }]}>
                     {palette.label}
                   </Text>
-                  <Text style={[styles.resultValue, font(styles.resultValue)]}>{result.value}</Text>
+                  <Text style={styles.resultValue}>{result.value}</Text>
                 </View>
-                <Text style={[styles.score, font(styles.score), { color: palette.color }]}>
+                <Text style={[styles.score, { color: palette.color }]}>
                   {result.score}
                 </Text>
               </View>
 
               <View style={styles.resultDetails}>
                 <View style={styles.detailRow}>
-                  <Text style={[styles.detailLabel, font(styles.detailLabel)]}>
+                  <Text style={styles.detailLabel}>
                     {result.kind === "phone" ? "電信資訊" : "資料庫狀態"}
                   </Text>
-                  <Text style={[styles.detailValue, font(styles.detailValue)]}>{result.detail}</Text>
+                  <Text style={styles.detailValue}>{result.detail}</Text>
                 </View>
                 <View style={styles.resultDivider} />
-                <Text style={[styles.resultMessage, font(styles.resultMessage)]}>{result.message}</Text>
+                <Text style={styles.resultMessage}>{result.message}</Text>
               </View>
 
               <View style={styles.actionRow}>
                 <TouchableOpacity style={styles.secondaryButton} onPress={addToBlacklist}>
                   <Ionicons name="ban-outline" size={20} color="#2d5fa9" />
-                  <Text style={[styles.secondaryButtonText, font(styles.secondaryButtonText)]}>
+                  <Text style={styles.secondaryButtonText}>
                     加入黑名單
                   </Text>
                 </TouchableOpacity>
                 {result.kind === "line" ? (
                   <TouchableOpacity style={styles.reportButton} onPress={reportLineId}>
                     <Ionicons name="flag-outline" size={20} color="#ffffff" />
-                    <Text style={[styles.reportButtonText, font(styles.reportButtonText)]}>我要通報</Text>
+                    <Text style={styles.reportButtonText}>我要通報</Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
@@ -420,14 +415,14 @@ export default function RiskQueryScreen() {
           ) : null}
 
           <View style={styles.historySection}>
-            <Text style={[styles.sectionTitle, font(styles.sectionTitle)]}>
+            <Text style={styles.sectionTitle}>
               {mode === "phone" ? "電話查詢紀錄" : "LINE ID 查詢紀錄"}
             </Text>
             {visibleRecords.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="time-outline" size={31} color="#a3b1c3" />
-                <Text style={[styles.emptyTitle, font(styles.emptyTitle)]}>尚無查詢紀錄</Text>
-                <Text style={[styles.emptyText, font(styles.emptyText)]}>完成查詢後會顯示在這裡</Text>
+                <Text style={styles.emptyTitle}>尚無查詢紀錄</Text>
+                <Text style={styles.emptyText}>完成查詢後會顯示在這裡</Text>
               </View>
             ) : (
               visibleRecords.map((record) => {
@@ -442,8 +437,8 @@ export default function RiskQueryScreen() {
                     <View style={[styles.historyIcon, { backgroundColor: recordPalette.background }]}>
                       <Ionicons name={recordPalette.icon} size={21} color={recordPalette.color} />
                     </View>
-                    <Text style={[styles.historyValue, font(styles.historyValue)]}>{record.value}</Text>
-                    <Text style={[styles.historyRisk, font(styles.historyRisk), { color: recordPalette.color }]}>
+                    <Text style={styles.historyValue}>{record.value}</Text>
+                    <Text style={[styles.historyRisk, { color: recordPalette.color }]}>
                       {recordPalette.label}
                     </Text>
                     <Ionicons name="chevron-forward" size={19} color="#9caabd" />

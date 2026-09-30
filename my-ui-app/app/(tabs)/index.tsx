@@ -124,7 +124,7 @@ export default function HomeScreen() {
             {avatarUri ? (
               <Image source={{ uri: avatarUri }} style={styles.profileAvatarImage} />
             ) : (
-              <Ionicons name="person-outline" size={27} color="#1d2738" />
+              <Ionicons name="person-outline" size={32} color="#1d2738" />
             )}
           </TouchableOpacity>
         </View>

@@ -1084,9 +1084,9 @@ export const homeStyles = StyleSheet.create({
     height: 82,
   },
   profileButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
