@@ -34,7 +34,7 @@ export default function Login() {
     return (
       globalObject?.location?.origin ||
       process.env.EXPO_PUBLIC_FRONTEND_URL ||
-      "http://localhost:8082"
+      "https://maipianaishield-d61c7.web.app"
     );
   };
 
@@ -121,8 +121,7 @@ export default function Login() {
       });
 
       if (Platform.OS === "web") {
-        const result = await signInWithPopup(auth, provider);
-        await finishGoogleLogin(result.user);
+        await signInWithRedirect(auth, provider);
         return;
       }
 
@@ -729,6 +728,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+
+
+
+
+
+
 
 
 
