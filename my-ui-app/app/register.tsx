@@ -1,8 +1,6 @@
 import { useState } from "react";
 import {
   View,
-  Text,
-  TextInput,
   Pressable,
   TouchableOpacity,
   StyleSheet,
@@ -12,6 +10,7 @@ import {
 } from "react-native";
 
 import { router } from "expo-router";
+import { Text, TextInput } from "@/components/app-text";
 
 export default function Register() {
   const [username, setUsername] = useState("");

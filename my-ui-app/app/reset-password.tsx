@@ -4,12 +4,11 @@ import {
   Alert,
   Image,
   Linking,
-  Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import { Text, TextInput } from "@/components/app-text";
 import {
   confirmPasswordReset,
   verifyPasswordResetCode,

@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   View,
-  Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Image,
@@ -14,6 +12,7 @@ import {
 } from "react-native";
 
 import { router } from "expo-router";
+import { Text, TextInput } from "@/components/app-text";
 
 import {
   GoogleAuthProvider,

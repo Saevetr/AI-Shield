@@ -1,35 +1,20 @@
 ﻿import { useCallback, useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { Text } from "@/components/app-text";
 import { router, useFocusEffect } from "expo-router";
 import {
   Image,
   SafeAreaView,
   ScrollView,
-  Text,
   TouchableOpacity,
   View,
 } from "react-native";
 
-import { scaledTextStyle, useFontSize } from "@/utils/fontSize";
 import { getSavedProfile } from "@/utils/profile";
 
 import { homeStyles as styles } from "../../styles/tabs.styles";
 
-const quickActions = [
-  {
-    title: "電話查詢",
-    subtitle: "檢查來電風險",
-    icon: "call",
-    color: "#3b82f6",
-    route: "/phone-query",
-  },
-  {
-    title: "LINE ID 查詢",
-    subtitle: "檢查帳號安全性",
-    image: require("@/assets/images/line.png"),
-    color: "#22c55e",
-    route: "/line-query",
-  },
+const secondaryActions = [
   {
     title: "訊息分析",
     subtitle: "分析可疑訊息",
@@ -86,12 +71,10 @@ const getRandomAntiFraudImage = (currentImage?: string) => {
 };
 
 export default function HomeScreen() {
-  const { fontSize } = useFontSize();
   const [policeAntiFraudImage, setPoliceAntiFraudImage] = useState(() =>
     getRandomAntiFraudImage()
   );
   const [avatarUri, setAvatarUri] = useState("");
-  const font = (style: any) => scaledTextStyle(style, fontSize);
 
   useEffect(() => {
     policeAntiFraudImages.forEach((image) => {
@@ -148,8 +131,8 @@ export default function HomeScreen() {
 
         <View style={styles.heroCard}>
           <View style={styles.heroTextBlock}>
-            <Text style={[styles.heroTitle, font(styles.heroTitle)]}>AI 智能防詐，守護你的每一通訊息</Text>
-            <Text style={[styles.heroSubtitle, font(styles.heroSubtitle)]}>即時偵測、風險提示，遇到可疑內容先查證。</Text>
+            <Text style={styles.heroTitle}>AI 智能防詐，守護你的每一通訊息</Text>
+            <Text style={styles.heroSubtitle}>即時偵測、風險提示，遇到可疑內容先查證。</Text>
           </View>
           <View style={styles.heroIconCircle}>
             <Ionicons name="shield-checkmark" size={30} color="#2f7df6" />
@@ -157,12 +140,49 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.sectionHeaderRow}>
-          <Text style={[styles.sectionTitle, font(styles.sectionTitle)]}>快速檢測</Text>
-          <Text style={[styles.sectionHint, font(styles.sectionHint)]}>一鍵進入常用工具</Text>
+          <Text style={styles.sectionTitle}>立即查詢</Text>
+          <Text style={styles.sectionHint}>先查證，再行動</Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.primaryQueryCard}
+          onPress={() => router.push("/risk-query" as never)}
+          activeOpacity={0.84}
+        >
+          <View style={styles.primaryIconGroup}>
+            <View style={[styles.primaryIconCircle, styles.phoneIconCircle]}>
+              <Ionicons name="call" size={30} color="#2f73df" />
+            </View>
+            <View style={[styles.primaryIconCircle, styles.lineIconCircle]}>
+              <Image
+                source={require("@/assets/images/line.png")}
+                style={styles.primaryLineIcon}
+                resizeMode="contain"
+              />
+            </View>
+          </View>
+
+          <View style={styles.primaryQueryText}>
+            <Text style={styles.primaryQueryTitle}>
+              電話與 LINE ID 查詢
+            </Text>
+            <Text style={styles.primaryQuerySubtitle}>
+              查詢陌生來電或可疑帳號的風險
+            </Text>
+          </View>
+
+          <View style={styles.primaryQueryArrow}>
+            <Ionicons name="chevron-forward" size={24} color="#397bf2" />
+          </View>
+        </TouchableOpacity>
+
+        <View style={[styles.sectionHeaderRow, styles.secondarySectionHeader]}>
+          <Text style={styles.sectionTitle}>AI 輔助分析</Text>
+          <Text style={styles.sectionHint}>訊息與圖片都能檢查</Text>
         </View>
 
         <View style={styles.quickGrid}>
-          {quickActions.map((item) => (
+          {secondaryActions.map((item) => (
             <TouchableOpacity
               key={item.title}
               style={styles.quickCard}
@@ -170,62 +190,41 @@ export default function HomeScreen() {
               activeOpacity={0.84}
             >
               <View style={[styles.quickIconCircle, { backgroundColor: `${item.color}17` }]}>
-                {item.image ? (
-                  <Image source={item.image} style={styles.quickImageIcon} resizeMode="contain" />
-                ) : (
-                  <Ionicons name={item.icon as any} size={34} color={item.color} />
-                )}
+                <Ionicons name={item.icon as any} size={34} color={item.color} />
               </View>
 
-              <Text style={[styles.quickTitle, font(styles.quickTitle)]}>{item.title}</Text>
-              <Text style={[styles.quickSubtitle, font(styles.quickSubtitle)]}>{item.subtitle}</Text>
+              <Text style={styles.quickTitle}>{item.title}</Text>
+              <Text style={styles.quickSubtitle}>{item.subtitle}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <View style={styles.infoGrid}>
-          <TouchableOpacity
-            style={styles.infoCard}
-            onPress={() => router.push("/phone-query" as never)}
-            activeOpacity={0.82}
-          >
-            <View style={styles.infoCardHeader}>
-              <Text style={[styles.infoTitle, font(styles.infoTitle)]}>近期高風險號碼</Text>
-              <Ionicons name="alert-circle-outline" size={20} color="#7d8da6" />
-            </View>
-            <View style={styles.infoEmptyState}>
-              <Text style={[styles.infoEmptyText, font(styles.infoEmptyText)]}>暫無新增資料</Text>
-              <Text style={[styles.infoHint, font(styles.infoHint)]}>可先輸入電話查詢</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.infoCard, styles.knowledgeCard]}
-            onPress={() => router.push("/(tabs)/explore" as never)}
-            activeOpacity={0.82}
-          >
-            <View style={styles.infoCardHeader}>
-              <Text style={[styles.infoTitle, font(styles.infoTitle)]}>防詐小知識</Text>
-              <Ionicons name="book-outline" size={20} color="#397bf2" />
-            </View>
-            <View style={styles.knowledgeBody}>
-              <Text style={[styles.knowledgeText, font(styles.knowledgeText)]}>假客服、投資群組、釣魚連結都能先學會辨識。</Text>
-              <View style={styles.knowledgeButton}>
-                <Text style={[styles.knowledgeButtonText, font(styles.knowledgeButtonText)]}>立即查看</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.knowledgeCard}
+          onPress={() => router.push("/(tabs)/explore" as never)}
+          activeOpacity={0.82}
+        >
+          <View style={styles.knowledgeIconCircle}>
+            <Ionicons name="book-outline" size={26} color="#397bf2" />
+          </View>
+          <View style={styles.knowledgeBody}>
+            <Text style={styles.knowledgeTitle}>防詐情報站</Text>
+            <Text style={styles.knowledgeText}>
+              認識最新消息、詐騙手法、防範技巧與法規
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={23} color="#7d91ad" />
+        </TouchableOpacity>
 
         <View style={styles.advocacySection}>
           <View style={styles.advocacyHeader}>
             <View>
-              <Text style={[styles.advocacyTitle, font(styles.advocacyTitle)]}>防詐宣導</Text>
-              <Text style={[styles.advocacySubtitle, font(styles.advocacySubtitle)]}>165 公開宣導圖，每次進入自動更換</Text>
+              <Text style={styles.advocacyTitle}>防詐宣導</Text>
+              <Text style={styles.advocacySubtitle}>165 公開宣導圖，每次進入自動更換</Text>
             </View>
 
             <View style={styles.sourceBadge}>
-              <Text style={[styles.sourceBadgeText, font(styles.sourceBadgeText)]}>165</Text>
+              <Text style={styles.sourceBadgeText}>165</Text>
             </View>
           </View>
 

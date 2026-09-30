@@ -1,11 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Text } from "@/components/app-text";
 import { useMemo, useState } from "react";
 import {
   Alert,
   SafeAreaView,
   ScrollView,
   StyleSheet,
-  Text,
   TouchableOpacity,
   View,
 } from "react-native";

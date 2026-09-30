@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { Text } from "@/components/app-text";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { setLogin } from "@/utils/auth";
 

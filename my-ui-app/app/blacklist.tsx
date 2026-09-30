@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Text, TextInput } from "@/components/app-text";
 import { router } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -10,8 +11,6 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,

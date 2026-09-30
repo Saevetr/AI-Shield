@@ -10,6 +10,7 @@ export default function RootLayout() {
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />
         <Stack.Screen name="reset-password" />
+        <Stack.Screen name="risk-query" />
         <Stack.Screen name="phone-query" />
         <Stack.Screen name="line-query" />
         <Stack.Screen name="blacklist" />

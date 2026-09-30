@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Text, TextInput } from "@/components/app-text";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -6,8 +7,6 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
