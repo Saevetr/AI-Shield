@@ -2,7 +2,13 @@
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
+    "expo": "^57.0.26",
+    "expo-modules-autolinking": "^57.0.13",
     "express": "^5.2.1",
-    "mysql2": "^3.22.4"
+    "mysql2": "^3.22.4",
+    "main": "expo-router/entry",
+    "expo-router": "~3.5.0" 
+
+
   }
 }

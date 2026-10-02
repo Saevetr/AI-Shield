@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "8c9af7c3-410e-497f-9310-de6e6e05fcc7"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.momiaowo.aishield",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}

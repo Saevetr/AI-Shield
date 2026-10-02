@@ -763,7 +763,7 @@ router.post("/google-login", async (req, res) => {
   }
 });
 
-const isAppSchemeUrl = (urlStr) => {
+const isAppappUrl = (urlStr) => {
   if (!urlStr) return false;
   return (
     urlStr.startsWith("myuiapp://") ||
@@ -773,7 +773,7 @@ const isAppSchemeUrl = (urlStr) => {
 };
 
 const getLineFrontendUrl = (requestedUrl) => {
-  if (isAppSchemeUrl(requestedUrl)) {
+  if (isAppappUrl(requestedUrl)) {
     return requestedUrl;
   }
 
@@ -874,7 +874,7 @@ const sendFrontendRedirect = (res, frontendUrl, status, message, extraParams = {
   const safeBase = getLineFrontendUrl(frontendUrl);
 
   // 如果是 App 深度連結 (如 exp://... 或 myuiapp://...)
-  if (isAppSchemeUrl(safeBase)) {
+  if (isAppappUrl(safeBase)) {
     const separator = safeBase.includes("?") ? "&" : "?";
     const query = new URLSearchParams();
     query.set("status", status);
