@@ -78,7 +78,7 @@ export default function ChatScreen() {
   const [liveTranscript, setLiveTranscript] = useState("");
   const [showFallbackModal, setShowFallbackModal] = useState(false);
 
-  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordingStartRef = useRef<number>(0);
   const webRecRef = useRef<any>(null);
 
