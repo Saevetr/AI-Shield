@@ -2401,7 +2401,7 @@ export const riskQueryStyles = StyleSheet.create({
   },
   detailRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   detailLabel: { color: "#71829a", fontSize: 13, fontWeight: "700" },
-  detailValue: { color: "#172033", fontSize: 13, fontWeight: "900" },
+  detailValue: { color: "#172033", fontSize: 13, fontWeight: "900", flex: 1, textAlign: "right" },
   resultDivider: { height: 1, backgroundColor: "#edf1f6", marginVertical: 13 },
   resultMessage: { color: "#52647d", fontSize: 13, lineHeight: 21, fontWeight: "700" },
   actionRow: { flexDirection: "row", gap: 10, marginTop: 11 },

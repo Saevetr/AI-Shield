@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Text, TextInput } from "@/components/app-text";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   Alert,
   SafeAreaView,
@@ -11,6 +12,8 @@ import {
   View,
 } from "react-native";
 import { getCurrentUser } from "@/utils/auth";
+
+const STORAGE_KEY_MESSAGE = "message_query_history";
 
 type RiskLevel = "high" | "medium" | "low";
 
@@ -75,6 +78,19 @@ export default function MessageQueryScreen() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [records, setRecords] = useState<AnalysisResult[]>([]);
+
+  // 載入持久化紀錄
+  useEffect(() => {
+    const loadRecords = async () => {
+      try {
+        const saved = await AsyncStorage.getItem(STORAGE_KEY_MESSAGE);
+        if (saved) setRecords(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to load message query records", e);
+      }
+    };
+    loadRecords();
+  }, []);
 
   const handleAnalyze = async () => {
     const text = messageText.trim();
@@ -148,7 +164,10 @@ export default function MessageQueryScreen() {
       };
 
       setResult(nextResult);
-      setRecords((current) => [nextResult, ...current].slice(0, 3));
+      
+      const nextRecords = [nextResult, ...records.filter(r => r.message !== nextResult.message)].slice(0, 5);
+      setRecords(nextRecords);
+      await AsyncStorage.setItem(STORAGE_KEY_MESSAGE, JSON.stringify(nextRecords));
     } catch (error) {
       console.log("訊息分析錯誤：", error);
       Alert.alert("連線錯誤", "無法連接到伺服器，請確認後端已啟動。");
@@ -289,46 +308,7 @@ export default function MessageQueryScreen() {
               </Text>
             </View>
 
-            {/* 🛡️ 行動與防護快捷操作列 */}
-            <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
-              <TouchableOpacity
-                style={{
-                  flex: 1,
-                  backgroundColor: "#ffffff",
-                  paddingVertical: 10,
-                  borderRadius: 10,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexDirection: "row",
-                  borderWidth: 1,
-                  borderColor: "#d1d5db",
-                  gap: 6,
-                }}
-                onPress={handleShareReport}
-                activeOpacity={0.78}
-              >
-                <Ionicons name="share-outline" size={17} color="#374151" />
-                <Text style={{ fontSize: 13, fontWeight: "700", color: "#374151" }}>警示說明</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={{
-                  flex: 1,
-                  backgroundColor: "#ef4444",
-                  paddingVertical: 10,
-                  borderRadius: 10,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexDirection: "row",
-                  gap: 6,
-                }}
-                onPress={handleAddToBlacklist}
-                activeOpacity={0.82}
-              >
-                <Ionicons name="ban" size={17} color="#ffffff" />
-                <Text style={{ fontSize: 13, fontWeight: "800", color: "#ffffff" }}>加入黑名單</Text>
-              </TouchableOpacity>
-            </View>
+            {/* 🛡️ 行動與防護快捷操作列已移除 */}
           </View>
         )}
 

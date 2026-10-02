@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Text, TextInput } from "@/components/app-text";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -32,6 +33,7 @@ type QueryResult = {
 
 const API_BASE =
   process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
+const STORAGE_KEY_RISK = "risk_query_history";
 
 const riskStyles: Record<
   RiskLevel,
@@ -121,10 +123,31 @@ export default function RiskQueryScreen() {
   const [result, setResult] = useState<QueryResult | null>(null);
   const [records, setRecords] = useState<QueryResult[]>([]);
 
+  useEffect(() => {
+    const loadRecords = async () => {
+      try {
+        const saved = await AsyncStorage.getItem(STORAGE_KEY_RISK);
+        if (saved) setRecords(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to load records", e);
+      }
+    };
+    loadRecords();
+  }, []);
+
+  const updateRecords = async (newRecord: QueryResult) => {
+    const nextRecords = [
+      newRecord,
+      ...records.filter((r) => r.id !== newRecord.id),
+    ].slice(0, 8);
+    setRecords(nextRecords);
+    await AsyncStorage.setItem(STORAGE_KEY_RISK, JSON.stringify(nextRecords));
+  };
+
   const changeMode = (nextMode: QueryMode) => {
     Keyboard.dismiss();
     setMode(nextMode);
-    setResult(null);
+    setResult(null); // 切換模式時強制清空結果
   };
 
   const runQuery = async (targetMode: QueryMode = mode) => {
@@ -146,6 +169,14 @@ export default function RiskQueryScreen() {
     }
 
     Keyboard.dismiss();
+    
+    // 檢查該 mode 是否已有結果
+    const existingResult = records.find(r => r.kind === targetMode && r.value === normalizedValue);
+    if (existingResult) {
+       setResult(existingResult);
+       return;
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
@@ -228,10 +259,7 @@ export default function RiskQueryScreen() {
       };
 
       setResult(nextResult);
-      setRecords((current) => [
-        nextResult,
-        ...current.filter((record) => record.id !== nextResult.id),
-      ].slice(0, 8));
+      await updateRecords(nextResult);
     } catch (error: any) {
       Alert.alert(
         error?.name === "AbortError" ? "查詢逾時" : "查詢失敗",
@@ -441,7 +469,9 @@ export default function RiskQueryScreen() {
                 <Text style={styles.detailLabel}>
                   {activeResult.kind === "phone" ? "電信資訊" : "資料庫狀態"}
                 </Text>
-                <Text style={styles.detailValue}>{activeResult.detail}</Text>
+                <Text style={[styles.detailValue, { flex: 1, textAlign: "right", marginLeft: 10 }]} numberOfLines={2}>
+                  {activeResult.detail}
+                </Text>
               </View>
               <View style={styles.resultDivider} />
               <Text style={styles.resultMessage}>{activeResult.message}</Text>

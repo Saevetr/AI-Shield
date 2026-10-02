@@ -4,6 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
+import Markdown from 'react-native-markdown-display';
 import {
   ActivityIndicator,
   Alert,
@@ -547,9 +548,16 @@ export default function ChatScreen() {
             >
               {item.type === "text" ? (
                 <View style={item.sender === "user" ? styles.userBubble : styles.aiBubble}>
-                  <Text style={item.sender === "user" ? styles.userBubbleText : styles.aiBubbleText}>
-                    {item.text}
-                  </Text>
+                  {item.sender === "user" ? (
+                    <Text style={styles.userBubbleText}>{item.text}</Text>
+                  ) : (
+                    <Markdown style={{
+                        body: { color: "#111827", fontSize: 16 },
+                        strong: { fontWeight: 'bold' }
+                    }}>
+                      {item.text}
+                    </Markdown>
+                  )}
                 </View>
               ) : item.type === "image" ? (
                 <View style={styles.imageBubble}>
