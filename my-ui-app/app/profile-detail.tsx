@@ -36,9 +36,14 @@ const weekDays = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 type EditableField = "email" | "name" | "phone";
 
 export default function ProfileDetailScreen() {
+  const API_URL =
+    process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
+
   const [name, setName] = useState("麥片AI Shield");
   const [phone, setPhone] = useState("0912 345 678");
   const [email, setEmail] = useState("maipian.aishield@gmail.com");
+  const [originalPhone, setOriginalPhone] = useState("0912 345 678");
+  const [originalEmail, setOriginalEmail] = useState("maipian.aishield@gmail.com");
   const [birthday, setBirthday] = useState("");
   const [gender, setGender] = useState("");
   const [avatarUri, setAvatarUri] = useState("");
@@ -47,6 +52,9 @@ export default function ProfileDetailScreen() {
   const [pendingField, setPendingField] = useState<EditableField | null>(null);
   const [pendingValue, setPendingValue] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
+  const [verificationToken, setVerificationToken] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isSendingCode, setIsSendingCode] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -70,6 +78,8 @@ export default function ProfileDetailScreen() {
       setName(savedProfile.name);
       setPhone(savedProfile.phone);
       setEmail(savedProfile.email);
+      setOriginalPhone(savedProfile.phone);
+      setOriginalEmail(savedProfile.email);
       setBirthday(savedProfile.birthday);
       setGender(savedProfile.gender);
       setAvatarUri(savedProfile.avatarUri);
@@ -161,6 +171,47 @@ export default function ProfileDetailScreen() {
     setIsSavingProfile(true);
 
     try {
+      const cleanPhone = phone.replace(/\s/g, "");
+      const cleanOriginalPhone = originalPhone.replace(/\s/g, "");
+      const isPhoneChanged = cleanPhone !== cleanOriginalPhone;
+      const isEmailChanged = email.trim().toLowerCase() !== originalEmail.trim().toLowerCase();
+
+      // 🛡️ 若變更了電話或 Email，必須有經後端簽發的驗證 Token
+      if ((isPhoneChanged || isEmailChanged) && !verificationToken) {
+        Alert.alert(
+          "無法儲存",
+          "您變更了電話號碼或電子郵件，必須先完成驗證碼核對後才能寫入資料庫！"
+        );
+        setIsSavingProfile(false);
+        return;
+      }
+
+      // 1. 同步請求後端寫入資料庫
+      try {
+        const updateRes = await fetch(`${API_URL}/api/auth/update-profile`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            currentEmail: originalEmail,
+            name,
+            phone: cleanPhone,
+            newEmail: email.trim().toLowerCase(),
+            verificationToken,
+          }),
+        });
+
+        const updateData = await updateRes.json();
+        if (!updateRes.ok || !updateData.success) {
+          throw new Error(updateData.message || "後端更新資料庫失敗");
+        }
+      } catch (backendError: any) {
+        // 若後端因未驗證而拒絕，跳出警告
+        Alert.alert("後端資料庫更新失敗", backendError.message || "無法更新遠端資料庫");
+        setIsSavingProfile(false);
+        return;
+      }
+
+      // 2. 後端更新成功後，才同步更新本地 AsyncStorage
       await saveProfile({
         avatarUri,
         birthday,
@@ -169,7 +220,12 @@ export default function ProfileDetailScreen() {
         name,
         phone,
       });
-      Alert.alert("儲存成功", "個人檔案已更新");
+
+      setOriginalPhone(phone);
+      setOriginalEmail(email);
+      setVerificationToken(""); // 成功後清空 token
+
+      Alert.alert("儲存成功", "資料庫與個人檔案已成功完成驗證並更新！");
     } catch {
       Alert.alert("儲存失敗", "目前無法儲存個人檔案，請稍後再試");
     } finally {
@@ -195,7 +251,7 @@ export default function ProfileDetailScreen() {
     setShowEditFieldModal(true);
   };
 
-  const handleSaveEditableField = () => {
+  const handleSaveEditableField = async () => {
     const nextValue = editingValue.trim();
 
     if (!editingField || !nextValue) {
@@ -219,33 +275,84 @@ export default function ProfileDetailScreen() {
       return;
     }
 
-    setPendingField(editingField);
-    setPendingValue(nextValue);
-    setVerificationCode("");
-    setShowEditFieldModal(false);
-    setShowVerificationModal(true);
-    Alert.alert("驗證碼已送出", editingField === "phone" ? "請查看手機簡訊" : "請查看 Gmail 信箱");
+    // 發送驗證碼到後端
+    try {
+      setIsSendingCode(true);
+      const res = await fetch(`${API_URL}/api/auth/send-verification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: editingField,
+          target: nextValue,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "發送驗證碼失敗");
+      }
+
+      setPendingField(editingField);
+      setPendingValue(nextValue);
+      setVerificationCode("");
+      setShowEditFieldModal(false);
+      setShowVerificationModal(true);
+
+      const devHint = data.devCode ? `\n(測試驗證碼: ${data.devCode})` : "";
+      Alert.alert("驗證碼已送出", `${editingField === "phone" ? "請查看手機簡訊" : "請查看 Gmail 信箱"}${devHint}`);
+    } catch (err: any) {
+      Alert.alert("發送失敗", err.message || "無法連線至後端發送驗證碼");
+    } finally {
+      setIsSendingCode(false);
+    }
   };
 
-  const handleVerifyEditableField = () => {
+  const handleVerifyEditableField = async () => {
     if (verificationCode.trim().length !== 6) {
       Alert.alert("驗證失敗", "請輸入 6 位數驗證碼");
       return;
     }
 
-    if (pendingField === "phone") {
-      setPhone(pendingValue.replace(/(\d{4})(\d{3})(\d{3})/, "$1 $2 $3"));
-    }
+    if (!pendingField || !pendingValue) return;
 
-    if (pendingField === "email") {
-      setEmail(pendingValue);
-    }
+    try {
+      setIsVerifying(true);
+      const res = await fetch(`${API_URL}/api/auth/verify-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: pendingField,
+          target: pendingValue,
+          code: verificationCode.trim(),
+        }),
+      });
 
-    setPendingField(null);
-    setPendingValue("");
-    setVerificationCode("");
-    setShowVerificationModal(false);
-    Alert.alert("修改成功", "資料已完成驗證並更新");
+      const data = await res.json();
+      if (!res.ok || !data.success || !data.verificationToken) {
+        throw new Error(data.message || "驗證碼錯誤或已過期");
+      }
+
+      // 後端驗證通過，儲存後端簽發的憑證 Token
+      setVerificationToken(data.verificationToken);
+
+      if (pendingField === "phone") {
+        setPhone(pendingValue.replace(/(\d{4})(\d{3})(\d{3})/, "$1 $2 $3"));
+      }
+
+      if (pendingField === "email") {
+        setEmail(pendingValue);
+      }
+
+      setPendingField(null);
+      setPendingValue("");
+      setVerificationCode("");
+      setShowVerificationModal(false);
+      Alert.alert("驗證成功", "已通過身分驗證！請記得點擊右上角「儲存」以同步寫入資料庫。");
+    } catch (err: any) {
+      Alert.alert("驗證失敗", err.message || "驗證碼核對未通過");
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   const handleChangePassword = () => {

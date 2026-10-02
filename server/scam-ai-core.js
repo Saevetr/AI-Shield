@@ -4,13 +4,28 @@ const { GoogleGenAI } = require('@google/genai');
 const fs = require('fs');
 const path = require('path');
 
-// 初始化，自動讀取 process.env.GEMINI_API_KEY
-const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY
-});
+// 取得 API Key（延遲或啟動時檢查）
+const getGenAIClient = () => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        throw new Error("GEMINI_API_KEY 環境變數未設定，無法使用 AI 分析服務");
+    }
+    return new GoogleGenAI({ apiKey });
+};
 
-// 建立一個陣列，用來存放這通電話或這次對話的「上下文歷史紀錄」
-let scamChatSession = [];
+/**
+ * 安全刪除暫存檔案輔助函式
+ */
+function safeDeleteFile(filePath) {
+    if (!filePath) return;
+    try {
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+    } catch (err) {
+        console.warn(`[⚠️ 暫存檔刪除失敗] ${filePath}:`, err.message);
+    }
+}
 
 /**
  * 輔助函式：將本地檔案轉換為 Gemini 所需的 Base64 inlineData 格式
@@ -33,15 +48,15 @@ function fileToGenerativePart(relativePath, mimeType) {
 /**
  * 核心防詐分析引擎（供後端 Express 路由直接呼叫）
  * 整合「文字 + 圖片截圖 + 語音錄音」三合一
+ * 修正：移除全域 scamChatSession，防止不同使用者之間通話與個資串供外洩
  */
 async function analyzeScamAPI(req, res) {
+    const scamImageFile = req.files?.["scamImage"]?.[0];
+    const scamAudioFile = req.files?.["scamAudio"]?.[0];
+
     try {
         const scamText = req.body.text;
         
-        // 取得 Multer 傳過來的多模態檔案物件 (.fields 格式)
-        const scamImageFile = req.files?.["scamImage"]?.[0];
-        const scamAudioFile = req.files?.["scamAudio"]?.[0];
-
         // 準備本次請求的 Parts 陣列
         const currentParts = [];
 
@@ -81,41 +96,43 @@ async function analyzeScamAPI(req, res) {
             });
         }
 
-        // 4. 【核心：歷史上下文累積】
-        scamChatSession.push({
+        // 4. 【修復全域污染】每個請求使用獨立的上下文，可選接受客戶端帶來的對話歷程
+        const requestContents = [];
+        if (req.body.history) {
+            try {
+                const clientHistory = typeof req.body.history === 'string'
+                    ? JSON.parse(req.body.history)
+                    : req.body.history;
+                if (Array.isArray(clientHistory)) {
+                    // 最多取最近 6 則對話，防止 context 超限
+                    requestContents.push(...clientHistory.slice(-6));
+                }
+            } catch (e) {
+                console.warn("無法解析傳入的 history，改為僅分析本次輸入");
+            }
+        }
+
+        requestContents.push({
             role: 'user',
             parts: currentParts
         });
 
-        // 5. 呼叫 Gemini 3.1 Pro Preview 進行精準判斷
+        const ai = getGenAIClient();
+
+        // 5. 呼叫 Gemini 進行判斷（相容 2.5 / 3.x）
         const response = await ai.models.generateContent({
-            model: 'gemini-3.1-pro-preview', // 鎖定 3.1 Pro 核心
-            contents: scamChatSession,      // 帶入完整歷史上下文
+            model: 'gemini-2.5-flash', // 使用穩定泛用模型；或支援從環境變數指定
+            contents: requestContents,
             config: {
                 systemInstruction: "你是一位台灣資深的防詐騙專家。請分析使用者提供的歷史對話、圖片截圖或語音錄音檔。如果發現對方提及『ATM操作』、『監管帳戶』、『法院公文』、『假冒親友急需用錢』、『購買點數』，或語氣具備『恐嚇、催促、不准掛電話、要求保密』等特徵，請立即判定為詐騙。請務必用繁體中文回應，並給出：1. 詐騙風險指數 (0-100%) 2. 核心警告原因。",
-                temperature: 0.2, 
-                
-                // 開啟 Gemini 3.1 核心亮點：Thinking 思考鏈推理
-                thinkingConfig: {
-                    thinkingBudget: 2048 
-                }
+                temperature: 0.2,
             }
         });
 
-        const aiResponseText = response.text;
+        const aiResponseText = response.text || "";
         console.log(`\n=== 🚨 實時防詐多模態分析結果 ===\n${aiResponseText}\n=======================================`);
 
-        // 6. 記得把 AI 的判定也塞進歷史紀錄，保持上下文完整
-        scamChatSession.push({
-            role: 'model',
-            parts: [{ text: aiResponseText }]
-        });
-
-        // 7. 異步安全刪除伺服器上的暫存檔案，防止硬碟爆滿
-        if (scamImageFile && fs.existsSync(scamImageFile.path)) fs.unlinkSync(scamImageFile.path);
-        if (scamAudioFile && fs.existsSync(scamAudioFile.path)) fs.unlinkSync(scamAudioFile.path);
-
-        // 8. 回傳分析報告給前端
+        // 6. 回傳分析報告給前端
         return res.json({
             success: true,
             data: {
@@ -130,6 +147,10 @@ async function analyzeScamAPI(req, res) {
             message: "AI 多模態分析失敗",
             error: error.message
         });
+    } finally {
+        // 7. 【修復暫存檔洩漏】無論成功或失敗，都務必清理上傳暫存檔
+        if (scamImageFile?.path) safeDeleteFile(scamImageFile.path);
+        if (scamAudioFile?.path) safeDeleteFile(scamAudioFile.path);
     }
 }
 

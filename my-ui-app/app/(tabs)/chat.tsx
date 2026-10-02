@@ -131,12 +131,10 @@ export default function ChatScreen() {
       }
 
       // 4. 發送請求至後端 index.js -> scam-ai-core.js
+      // 注意：不可手動指定 Content-Type 為 multipart/form-data，否則會遺失 boundary 導致 Multer 解析失敗
       const response = await fetch(BACKEND_URL, {
         method: "POST",
         body: formData,
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
       });
 
       const result = await response.json();

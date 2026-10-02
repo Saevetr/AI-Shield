@@ -36,7 +36,7 @@ npm 或 yarn
 2. 安裝與執行
 前端 (Client)
 Bash
-cd client
+cd my
 npm install
 npx expo start
 掃描終端機顯示的 QR Code 即可在 Expo Go 中開啟。

@@ -8,6 +8,54 @@ const db = require("./db");
 const buildCustomerId = (prefix = "CUST") =>
   `${prefix}${Date.now()}${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
 
+// =========================================================================
+// 🔒 密碼安全 Hash 與驗證工具（安全加鹽 + 自動升級舊明文密碼）
+// =========================================================================
+const hashPassword = (password) => {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derivedKey = crypto.scryptSync(password, salt, 64);
+  return `${salt}:${derivedKey.toString("hex")}`;
+};
+
+const verifyPassword = (password, storedHash) => {
+  if (!storedHash || !password) return false;
+
+  // 1. 如果是標準格式 salt:hash
+  if (storedHash.includes(":")) {
+    const parts = storedHash.split(":");
+    if (parts.length === 2) {
+      const [salt, key] = parts;
+      try {
+        const derivedKey = crypto.scryptSync(password, salt, 64);
+        const storedKeyBuffer = Buffer.from(key, "hex");
+        if (derivedKey.length === storedKeyBuffer.length) {
+          return crypto.timingSafeEqual(storedKeyBuffer, derivedKey);
+        }
+      } catch (err) {
+        return false;
+      }
+    }
+  }
+
+  // 2. 向後相容：如果是歷史舊資料（明文密碼）
+  return storedHash === password;
+};
+
+// =========================================================================
+// 📱 核心驗證碼儲存池（防止未經驗證直接竄改 DB）
+// =========================================================================
+const verificationStore = new Map();
+
+// 清理過期的驗證碼
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, data] of verificationStore.entries()) {
+    if (data.expiresAt < now) {
+      verificationStore.delete(key);
+    }
+  }
+}, 60000);
+
 const verifyFirebaseGoogleUser = async (idToken) => {
   const apiKey =
     process.env.FIREBASE_WEB_API_KEY ||
@@ -51,7 +99,7 @@ const verifyFirebaseGoogleUser = async (idToken) => {
 };
 
 // =========================================================================
-// 🚀 1. 登入功能 (Login)
+// 🚀 1. 登入功能 (Login) - 支援 Hash 比對與自動升級
 // =========================================================================
 router.post("/login", async (req, res) => {
   const account = String(req.body.account || req.body.email || req.body.username || "").trim();
@@ -62,11 +110,9 @@ router.post("/login", async (req, res) => {
   }
 
   try {
-    // ⭐️ 改用你導出的 db.query(...)，且參數用陣列 [account, account, account, password] 傳入
-    // 這裡我們直接對 [user] 表加上中括號，確保 MSSQL 不會當作保留字報錯
     const [rows] = await db.query(
-      "SELECT user_id, username, email, phone, membership_level, status FROM [user] WHERE (email = ? OR username = ? OR phone = ?) AND password_hash = ? AND status = 'ACTIVE' LIMIT 1",
-      [account, account, account, password]
+      "SELECT user_id, username, email, phone, password_hash, membership_level, status FROM [user] WHERE (email = ? OR username = ? OR phone = ?) AND status = 'ACTIVE' LIMIT 1",
+      [account, account, account]
     );
 
     if (!rows || rows.length === 0) {
@@ -74,11 +120,28 @@ router.post("/login", async (req, res) => {
     }
 
     const user = rows[0];
-    
-    // 更新最後登入時間（直接手動轉為 MSSQL 的 GETDATE() 與 [user] 格式避免轉換失敗）
+    const isPasswordValid = verifyPassword(password, user.password_hash);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ success: false, message: "帳號或密碼錯誤" });
+    }
+
+    // 🔒 若資料庫中的密碼還是舊明文，自動升級為安全加鹽 Hash
+    if (!user.password_hash.includes(":")) {
+      const secureHash = hashPassword(password);
+      await db.query("UPDATE [user] SET password_hash = ? WHERE user_id = ?", [
+        secureHash,
+        user.user_id,
+      ]);
+    }
+
+    // 更新最後登入時間
     await db.query("UPDATE [user] SET last_login = GETDATE() WHERE user_id = ?", [user.user_id]);
 
-    return res.json({ success: true, message: "登入成功", data: user });
+    // 排除 password_hash 不外洩
+    const { password_hash, ...safeUser } = user;
+
+    return res.json({ success: true, message: "登入成功", data: safeUser });
   } catch (error) {
     console.error("❌ Login error:", error);
     return res.status(500).json({ 
@@ -90,7 +153,7 @@ router.post("/login", async (req, res) => {
 });
 
 // =========================================================================
-// 🚀 2. 註冊功能 (Register)
+// 🚀 2. 註冊功能 (Register) - 安全 Hash 儲存 + 正確初始化驗證狀態
 // =========================================================================
 router.post("/register", async (req, res) => {
   const username = String(req.body.username || "").trim();
@@ -118,10 +181,13 @@ router.post("/register", async (req, res) => {
     }
 
     const customerId = buildCustomerId();
+    // 🔒 使用加密 Hash 儲存密碼
+    const securePasswordHash = hashPassword(password);
 
+    // is_verified 預設為 0，直到使用者完成驗證碼核對
     await db.query(
-      "INSERT INTO [user] (username, email, phone, password_hash, membership_level, is_verified, status, customer_id, created_at) VALUES (?, ?, ?, ?, 'FREE', 1, 'ACTIVE', ?, GETDATE())",
-      [username, email, phone, password, customerId]
+      "INSERT INTO [user] (username, email, phone, password_hash, membership_level, is_verified, status, customer_id, created_at) VALUES (?, ?, ?, ?, 'FREE', 0, 'ACTIVE', ?, GETDATE())",
+      [username, email, phone, securePasswordHash, customerId]
     );
 
     const [users] = await db.query(
@@ -145,7 +211,191 @@ router.post("/register", async (req, res) => {
 });
 
 // =========================================================================
-// 🚀 3. 同步重設後的密碼到 MySQL/MSSQL (Sync Password)
+// 🚀 3. 發送驗證碼端點 (Send Verification Code)
+// =========================================================================
+router.post("/send-verification", async (req, res) => {
+  const type = String(req.body.type || "").trim().toLowerCase(); // "phone" | "email"
+  const target = String(req.body.target || "").trim();
+
+  if (!type || !target || (type !== "phone" && type !== "email")) {
+    return res.status(400).json({ success: false, message: "無效的驗證類型或對象" });
+  }
+
+  // 產生 6 位數純數字隨機驗證碼
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const key = `${type}:${target.toLowerCase()}`;
+  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 分鐘有效
+
+  verificationStore.set(key, {
+    code,
+    type,
+    target,
+    expiresAt,
+    verified: false,
+  });
+
+  console.log(`[🔑 驗證系統] 已發送 ${type} 驗證碼至 ${target}: ${code} (5分鐘有效)`);
+
+  return res.json({
+    success: true,
+    message: `驗證碼已發送至您的 ${type === "phone" ? "手機簡訊" : "電子信箱"}`,
+    devCode: code,
+  });
+});
+
+// =========================================================================
+// 🚀 4. 核對驗證碼並簽發驗證 Token (Verify Code)
+// =========================================================================
+router.post("/verify-code", async (req, res) => {
+  const type = String(req.body.type || "").trim().toLowerCase();
+  const target = String(req.body.target || "").trim();
+  const code = String(req.body.code || "").trim();
+
+  if (!type || !target || !code) {
+    return res.status(400).json({ success: false, message: "請輸入完整驗證資訊" });
+  }
+
+  const key = `${type}:${target.toLowerCase()}`;
+  const record = verificationStore.get(key);
+
+  if (!record) {
+    return res.status(400).json({ success: false, message: "驗證碼不存在或已失效，請重新發送" });
+  }
+
+  if (Date.now() > record.expiresAt) {
+    verificationStore.delete(key);
+    return res.status(400).json({ success: false, message: "驗證碼已過期，請重新發送" });
+  }
+
+  if (record.code !== code) {
+    return res.status(400).json({ success: false, message: "驗證碼不正確" });
+  }
+
+  // 驗證通過，簽發一次性驗證 Token
+  const verificationToken = crypto.randomBytes(24).toString("hex");
+  verificationStore.set(verificationToken, {
+    type,
+    target,
+    verified: true,
+    expiresAt: Date.now() + 10 * 60 * 1000,
+  });
+  verificationStore.delete(key);
+
+  return res.json({
+    success: true,
+    message: "驗證成功",
+    verificationToken,
+  });
+});
+
+// =========================================================================
+// 🚀 5. 更新個人資料（嚴格要求已驗證狀態才准變更 DB）
+// =========================================================================
+router.post("/update-profile", async (req, res) => {
+  const userId = req.body.userId || req.body.user_id;
+  const currentEmail = String(req.body.currentEmail || req.body.email || "").trim().toLowerCase();
+  const newName = req.body.name !== undefined ? String(req.body.name).trim() : null;
+  const newPhone = req.body.phone !== undefined ? String(req.body.phone).trim() : null;
+  const newEmail = req.body.newEmail !== undefined ? String(req.body.newEmail).trim().toLowerCase() : null;
+  const verificationToken = String(req.body.verificationToken || "").trim();
+
+  if (!userId && !currentEmail) {
+    return res.status(400).json({ success: false, message: "缺少使用者標識" });
+  }
+
+  try {
+    // 尋找目標使用者
+    const [users] = await db.query(
+      userId
+        ? "SELECT user_id, username, email, phone FROM [user] WHERE user_id = ? LIMIT 1"
+        : "SELECT user_id, username, email, phone FROM [user] WHERE email = ? LIMIT 1",
+      [userId || currentEmail]
+    );
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({ success: false, message: "找不到該使用者" });
+    }
+
+    const user = users[0];
+
+    // 🛡️ 核心安全防護：若變更了電話或 Email，必須檢核 verificationToken
+    const isChangingPhone = newPhone && newPhone !== user.phone;
+    const isChangingEmail = newEmail && newEmail !== user.email;
+
+    if (isChangingPhone || isChangingEmail) {
+      if (!verificationToken) {
+        return res.status(403).json({
+          success: false,
+          message: "變更電話或電子信箱必須先完成驗證碼核對，拒絕直接修改資料庫！",
+        });
+      }
+
+      const tokenRecord = verificationStore.get(verificationToken);
+      if (!tokenRecord || !tokenRecord.verified || Date.now() > tokenRecord.expiresAt) {
+        return res.status(403).json({
+          success: false,
+          message: "驗證憑證已失效或無效，請重新進行驗證！",
+        });
+      }
+
+      // 核對 Token 對應的目標是否與欲變更的新值一致
+      if (isChangingPhone && tokenRecord.target !== newPhone) {
+        return res.status(403).json({ success: false, message: "驗證號碼與欲變更號碼不一致" });
+      }
+      if (isChangingEmail && tokenRecord.target.toLowerCase() !== newEmail) {
+        return res.status(403).json({ success: false, message: "驗證信箱與欲變更信箱不一致" });
+      }
+
+      // 驗證成功，銷毀 Token 避免重複利用
+      verificationStore.delete(verificationToken);
+    }
+
+    // 執行更新
+    const updateFields = [];
+    const updateParams = [];
+
+    if (newName) {
+      updateFields.push("username = ?");
+      updateParams.push(newName);
+    }
+    if (newPhone) {
+      updateFields.push("phone = ?");
+      updateParams.push(newPhone);
+    }
+    if (newEmail) {
+      updateFields.push("email = ?");
+      updateParams.push(newEmail);
+      updateFields.push("is_verified = 1"); // 經過 Token 核對，確認已驗證
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ success: false, message: "無任何修改欄位" });
+    }
+
+    updateParams.push(user.user_id);
+    await db.query(
+      `UPDATE [user] SET ${updateFields.join(", ")} WHERE user_id = ?`,
+      updateParams
+    );
+
+    const [updatedUsers] = await db.query(
+      "SELECT user_id, username, email, phone, membership_level, status FROM [user] WHERE user_id = ? LIMIT 1",
+      [user.user_id]
+    );
+
+    return res.json({
+      success: true,
+      message: "個人資料已安全更新完成",
+      data: updatedUsers[0],
+    });
+  } catch (error) {
+    console.error("❌ Update profile error:", error);
+    return res.status(500).json({ success: false, message: "更新資料失敗", error: error.message });
+  }
+});
+
+// =========================================================================
+// 🚀 6. 同步重設後的密碼到 MySQL/MSSQL (Sync Password) - 支援 Hash 加密儲存
 // =========================================================================
 router.post("/sync-password", async (req, res) => {
   const email = String(req.body.email || "").trim().toLowerCase();
@@ -155,21 +405,26 @@ router.post("/sync-password", async (req, res) => {
     return res.status(400).json({ success: false, message: "資料不完整" });
   }
 
+  if (newPassword.length < 6) {
+    return res.status(400).json({ success: false, message: "新密碼至少需 6 位數" });
+  }
+
   try {
     // 檢查該使用者是否存在
     const [users] = await db.query("SELECT user_id FROM [user] WHERE email = ? LIMIT 1", [email]);
     
     if (!users || users.length === 0) {
-      return res.status(444).json({ success: false, message: "找不到該電子郵件對應的使用者" });
+      return res.status(404).json({ success: false, message: "找不到該電子郵件對應的使用者" });
     }
 
-    // 更新密碼
+    // 🔒 加密儲存新密碼
+    const secureHash = hashPassword(newPassword);
     await db.query(
       "UPDATE [user] SET password_hash = ? WHERE email = ?",
-      [newPassword, email]
+      [secureHash, email]
     );
 
-    return res.json({ success: true, message: "資料庫密碼已成功同步更新！" });
+    return res.json({ success: true, message: "資料庫密碼已成功加密同步更新！" });
   } catch (error) {
     console.error("❌ Sync password error:", error);
     return res.status(500).json({ 
@@ -241,7 +496,20 @@ router.post("/google-login", async (req, res) => {
   }
 });
 
+const isAppSchemeUrl = (urlStr) => {
+  if (!urlStr) return false;
+  return (
+    urlStr.startsWith("myuiapp://") ||
+    urlStr.startsWith("exp://") ||
+    urlStr.startsWith("exps://")
+  );
+};
+
 const getLineFrontendUrl = (requestedUrl) => {
+  if (isAppSchemeUrl(requestedUrl)) {
+    return requestedUrl;
+  }
+
   const publicFrontendUrl = "https://maipianaishield-d61c7.web.app";
   const configuredUrl = process.env.FRONTEND_URL || publicFrontendUrl;
 
@@ -261,7 +529,7 @@ const getLineFrontendUrl = (requestedUrl) => {
       requested.origin === publicFrontend.origin ||
       isPrivateDevelopmentHost
     ) {
-      return requested.origin;
+      return requested.href;
     }
   } catch (error) {
     console.warn("Invalid LINE frontend URL:", error.message);
@@ -335,8 +603,72 @@ const readLineState = (state) => {
   return stateData;
 };
 
-const buildLineFrontendRedirect = (frontendUrl, status, message, extraParams = {}) => {
-  const target = new URL("/line-callback", getLineFrontendUrl(frontendUrl));
+const sendFrontendRedirect = (res, frontendUrl, status, message, extraParams = {}) => {
+  const safeBase = getLineFrontendUrl(frontendUrl);
+
+  // 如果是 App 深度連結 (如 exp://... 或 myuiapp://...)
+  if (isAppSchemeUrl(safeBase)) {
+    const separator = safeBase.includes("?") ? "&" : "?";
+    const query = new URLSearchParams();
+    query.set("status", status);
+    if (message) query.set("message", message);
+    Object.entries(extraParams).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        query.set(key, String(value));
+      }
+    });
+    const finalAppUrl = `${safeBase}${separator}${query.toString()}`;
+
+    // 回傳 HTML 喚醒頁面，保證 iOS / Android 瀏覽器 100% 強制跳回 Expo Go
+    return res.type("html").send(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>正在返回 AI Shield...</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <style>
+    body {
+      margin: 0; padding: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f8fbff;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      height: 90vh; text-align: center;
+    }
+    .card {
+      background: white; padding: 32px 24px; border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08); max-width: 360px; width: 100%;
+    }
+    .icon { font-size: 48px; margin-bottom: 16px; }
+    h2 { margin: 0 0 8px; color: #1d2738; font-size: 20px; }
+    p { margin: 0 0 24px; color: #64748b; font-size: 14px; }
+    .btn {
+      display: block; background: #397bf2; color: white; text-decoration: none;
+      padding: 14px 20px; border-radius: 10px; font-weight: 600; font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">🛡️</div>
+    <h2>${status === "success" ? "授權成功！" : "授權未完成"}</h2>
+    <p>${status === "success" ? "正在自動返回 AI Shield App..." : (message || "即將返回 App...")}</p>
+    <a id="openBtn" class="btn" href="${finalAppUrl}">點此返回 App</a>
+  </div>
+  <script>
+    const target = "${finalAppUrl}";
+    window.location.href = target;
+    setTimeout(function() {
+      window.location.replace(target);
+    }, 400);
+  </script>
+</body>
+</html>
+    `);
+  }
+
+  // 如果是 Web 網頁連結
+  const target = new URL("/line-callback", safeBase);
   target.searchParams.set("status", status);
 
   if (message) {
@@ -349,7 +681,7 @@ const buildLineFrontendRedirect = (frontendUrl, status, message, extraParams = {
     }
   });
 
-  return target.toString();
+  return res.redirect(target.toString());
 };
 
 const createLineLoginTicket = (user) => {
@@ -459,12 +791,11 @@ const handleLineCallback = async (req, res) => {
     frontendUrl = stateData.frontendUrl || frontendUrl;
 
     if (req.query.error) {
-      return res.redirect(
-        buildLineFrontendRedirect(
-          frontendUrl,
-          "failed",
-          String(req.query.error_description || req.query.error)
-        )
+      return sendFrontendRedirect(
+        res,
+        frontendUrl,
+        "failed",
+        String(req.query.error_description || req.query.error)
       );
     }
 
@@ -544,19 +875,148 @@ const handleLineCallback = async (req, res) => {
 
     const ticket = createLineLoginTicket(lineUsers[0]);
 
-    return res.redirect(
-      buildLineFrontendRedirect(frontendUrl, "success", "LINE login successful", { ticket })
-    );
+    return sendFrontendRedirect(res, frontendUrl, "success", "LINE login successful", { ticket });
   } catch (error) {
     console.error("LINE callback error:", error);
 
-    return res.redirect(
-      buildLineFrontendRedirect(frontendUrl, "failed", error.message || "LINE login failed")
-    );
+    return sendFrontendRedirect(res, frontendUrl, "failed", error.message || "LINE login failed");
   }
 };
 
 router.get("/line-login/callback", handleLineCallback);
 router.get("/line/callback", handleLineCallback);
+
+// =========================================================================
+// 🚀 Google OAuth 流程（專為 Expo Go 與原生行動端設計）
+// =========================================================================
+const getGoogleRedirectUri = (req) => {
+  const forwardedProtocol = String(req.headers["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim();
+  const protocol = forwardedProtocol || req.protocol;
+  const host = req.get("host");
+
+  if (host && host.endsWith(".onrender.com")) {
+    return `${protocol}://${host}/api/auth/google-login/callback`;
+  }
+
+  return (
+    process.env.GOOGLE_REDIRECT_URI ||
+    `${protocol}://${host}/api/auth/google-login/callback`
+  );
+};
+
+// Google OAuth 起點
+router.get("/google-start", (req, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const redirectUri = getGoogleRedirectUri(req);
+
+  if (!clientId) {
+    return res.status(500).json({
+      success: false,
+      message: "GOOGLE_CLIENT_ID 環境變數未設定",
+    });
+  }
+
+  const frontendUrl = getLineFrontendUrl(req.query.frontendUrl);
+  const state = createLineState(frontendUrl, redirectUri);
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    state,
+    scope: "openid profile email",
+    prompt: "select_account",
+  });
+
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+});
+
+const handleGoogleCallback = async (req, res) => {
+  let frontendUrl = process.env.FRONTEND_URL || "https://maipianaishield-d61c7.web.app";
+
+  try {
+    const stateData = readLineState(req.query.state);
+    frontendUrl = stateData.frontendUrl || frontendUrl;
+
+    if (req.query.error) {
+      return sendFrontendRedirect(
+        res,
+        frontendUrl,
+        "failed",
+        String(req.query.error)
+      );
+    }
+
+    const code = String(req.query.code || "");
+    if (!code) {
+      throw new Error("Missing Google authorization code");
+    }
+
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: process.env.GOOGLE_CLIENT_ID || "",
+        client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+        redirect_uri: stateData.redirectUri || getGoogleRedirectUri(req),
+        grant_type: "authorization_code",
+      }).toString(),
+    });
+    const tokenData = await tokenResponse.json();
+
+    if (!tokenResponse.ok || !tokenData.access_token) {
+      throw new Error(tokenData.error_description || tokenData.error || "Failed to get Google token");
+    }
+
+    const userinfoResponse = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+    });
+    const profile = await userinfoResponse.json();
+
+    if (!userinfoResponse.ok || !profile.email) {
+      throw new Error("Failed to get Google profile");
+    }
+
+    const email = String(profile.email).trim().toLowerCase();
+    const displayName = String(profile.name || email.split("@")[0]).trim();
+    const googleId = String(profile.sub || "");
+
+    const [existingRows] = await db.query(
+      "SELECT user_id FROM [user] WHERE email = ? LIMIT 1",
+      [email]
+    );
+
+    if (existingRows.length > 0) {
+      await db.query(
+        "UPDATE [user] SET last_login = GETDATE(), is_verified = 1, status = 'ACTIVE' WHERE user_id = ?",
+        [existingRows[0].user_id]
+      );
+    } else {
+      const username = `${displayName}_${googleId.slice(-6)}`;
+      const customerId = buildCustomerId("GOOGLE");
+      await db.query(
+        "INSERT INTO [user] (username, email, password_hash, membership_level, is_verified, status, customer_id, created_at, last_login) VALUES (?, ?, ?, 'FREE', 1, 'ACTIVE', ?, GETDATE(), GETDATE())",
+        [username, email, `GOOGLE:${googleId}`, customerId]
+      );
+    }
+
+    const [googleUsers] = await db.query(
+      "SELECT user_id, username, email, phone, membership_level, status, customer_id FROM [user] WHERE email = ? LIMIT 1",
+      [email]
+    );
+
+    const ticket = createLineLoginTicket(googleUsers[0]);
+
+    return sendFrontendRedirect(res, frontendUrl, "success", "Google login successful", { ticket });
+  } catch (error) {
+    console.error("Google OAuth callback error:", error);
+    return sendFrontendRedirect(res, frontendUrl, "failed", error.message || "Google login failed");
+  }
+};
+
+router.get("/google-login/callback", handleGoogleCallback);
+router.get("/google/callback", handleGoogleCallback);
 
 module.exports = router;

@@ -4,12 +4,13 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
-  Linking,
   Alert,
   Modal,
   Platform,
   ScrollView,
 } from "react-native";
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
 
 import { router } from "expo-router";
 import { Text, TextInput } from "@/components/app-text";
@@ -18,12 +19,12 @@ import {
   GoogleAuthProvider,
   sendPasswordResetEmail,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/app/config/firebase";
 import { setLogin } from "@/utils/auth";
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function Login() {
   const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
@@ -37,7 +38,6 @@ export default function Login() {
     );
   };
 
-
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [email, setEmail] = useState("");
@@ -45,9 +45,6 @@ export default function Login() {
   const [resetEmail, setResetEmail] = useState("");
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [isResetLoading, setIsResetLoading] = useState(false);
-
-
-
 
   const finishGoogleLogin = useCallback(async (firebaseUser: any) => {
     console.log("GOOGLE FIREBASE USER:", firebaseUser.email);
@@ -90,50 +87,116 @@ export default function Login() {
     router.replace("/(tabs)");
   }, [API_URL]);
 
-  useEffect(() => {
-    const checkGoogleRedirect = async () => {
-      try {
-        const redirectResult = await getRedirectResult(auth);
-
-        if (redirectResult?.user) {
-          console.log("GOOGLE REDIRECT RESULT:", redirectResult.user.email);
-          await finishGoogleLogin(redirectResult.user);
-        }
-      } catch (error: any) {
-        console.log("Google redirect 登入錯誤：", error);
-        Alert.alert(
-          "Google 登入失敗",
-          `${error?.code || ""}\n${error?.message || error}`
-        );
-      }
-    };
-
-    checkGoogleRedirect();
-  }, [finishGoogleLogin]);
-
   const handleGoogleLogin = async () => {
     try {
-      const provider = new GoogleAuthProvider();
-
-      provider.setCustomParameters({
-        prompt: "select_account",
-      });
-
       if (Platform.OS === "web") {
-        await signInWithRedirect(auth, provider);
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: "select_account" });
+        const userCredential = await signInWithPopup(auth, provider);
+        if (userCredential?.user) {
+          await finishGoogleLogin(userCredential.user);
+        }
         return;
       }
 
-      await signInWithRedirect(auth, provider);
-    } catch (error: any) {
-      console.log("Google redirect 錯誤：", error);
+      // 📱 Expo Go / 原生 App：透過後端 Google OAuth 端點與 WebBrowser 攔截
+      const returnUrl = Linking.createURL("/google-callback");
+      const googleAuthUrl = `${API_URL}/api/auth/google-start?frontendUrl=${encodeURIComponent(returnUrl)}`;
 
+      const authResult = await WebBrowser.openAuthSessionAsync(googleAuthUrl, returnUrl);
+
+      if (authResult.type === "success" && authResult.url) {
+        const parsed = Linking.parse(authResult.url);
+        const ticket = parsed.queryParams?.ticket;
+        const status = parsed.queryParams?.status;
+        const errMsg = parsed.queryParams?.message;
+
+        if (status === "success" && ticket) {
+          const res = await fetch(`${API_URL}/api/auth/line-login/complete`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ticket: String(ticket) }),
+          });
+
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "Google 登入驗證失敗");
+          }
+
+          await setLogin(true);
+          const globalObject = globalThis as any;
+          if (globalObject.localStorage) {
+            globalObject.localStorage.setItem("isLogin", "true");
+            globalObject.localStorage.setItem("user", JSON.stringify(data.data || {}));
+          }
+
+          router.replace("/(tabs)");
+        } else if (status === "failed") {
+          Alert.alert("Google 登入失敗", String(errMsg || "授權失敗"));
+        }
+      }
+    } catch (error: any) {
+      console.log("Google 登入錯誤：", error);
       Alert.alert(
         "Google 登入失敗",
         `${error?.code || ""}\n${error?.message || error}`
       );
     }
   };
+
+  // 📱 LINE 登入處理（Web 走重定向，Expo Go / 原生走 WebBrowser 授權自動返回 App）
+  const handleLineLogin = async () => {
+    try {
+      const returnUrl = Platform.OS === "web"
+        ? `${getCurrentFrontendUrl()}/line-callback`
+        : Linking.createURL("/line-callback");
+
+      const lineAuthUrl = `${API_URL}/api/auth/line-login?frontendUrl=${encodeURIComponent(returnUrl)}`;
+
+      if (Platform.OS === "web") {
+        window.location.href = lineAuthUrl;
+        return;
+      }
+
+      // 📱 Expo Go / 原生 App：彈出系統授權視窗，授權完成後自動關閉視窗並返回 App
+      const authResult = await WebBrowser.openAuthSessionAsync(lineAuthUrl, returnUrl);
+
+      if (authResult.type === "success" && authResult.url) {
+        const parsed = Linking.parse(authResult.url);
+        const ticket = parsed.queryParams?.ticket;
+        const status = parsed.queryParams?.status;
+        const errMsg = parsed.queryParams?.message;
+
+        if (status === "success" && ticket) {
+          const res = await fetch(`${API_URL}/api/auth/line-login/complete`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ticket: String(ticket) }),
+          });
+
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.message || "LINE 登入驗證失敗");
+          }
+
+          await setLogin(true);
+          const globalObject = globalThis as any;
+          if (globalObject.localStorage) {
+            globalObject.localStorage.setItem("isLogin", "true");
+            globalObject.localStorage.setItem("user", JSON.stringify(data.data || {}));
+          }
+
+          router.replace("/(tabs)");
+        } else if (status === "failed") {
+          Alert.alert("LINE 登入失敗", String(errMsg || "授權失敗"));
+        }
+      }
+    } catch (err: any) {
+      console.log("LINE login error:", err);
+      Alert.alert("LINE 登入錯誤", err.message || "無法啟動 LINE 登入");
+    }
+  };
+
   const handleLogin = async () => {
     const account = email.trim();
     const inputPassword = password.trim();
@@ -364,15 +427,7 @@ export default function Login() {
 
           <TouchableOpacity
             style={styles.socialButton}
-            onPress={() => {
-              const frontendUrl = getCurrentFrontendUrl();
-
-              Linking.openURL(
-                `${API_URL}/api/auth/line-login?frontendUrl=${encodeURIComponent(
-                  frontendUrl
-                )}`
-              );
-            }}
+            onPress={handleLineLogin}
           >
             <Image
               source={require("@/assets/images/line.png")}
