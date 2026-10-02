@@ -441,6 +441,90 @@ router.post("/update-profile", async (req, res) => {
     return res.status(500).json({ success: false, message: "更新資料失敗", error: error.message });
   }
 });
+// =========================================================================
+// 🚀 6. 修改密碼 (Change Password) - 需比對目前密碼
+// =========================================================================
+router.post("/change-password", async (req, res) => {
+  const userId = req.body.userId || req.body.user_id;
+  const email = req.body.email ? String(req.body.email).trim().toLowerCase() : "";
+  const currentPassword = String(req.body.currentPassword || "").trim();
+  const newPassword = String(req.body.newPassword || "").trim();
+
+  if ((!userId && !email) || !currentPassword || !newPassword) {
+    return res.status(400).json({ success: false, message: "請輸入目前密碼與新密碼" });
+  }
+
+  if (newPassword.length < 8) {
+    return res.status(400).json({ success: false, message: "新密碼至少需 8 位數" });
+  }
+
+  try {
+    const [users] = await db.query(
+      userId
+        ? "SELECT user_id, password_hash FROM [user] WHERE user_id = ? LIMIT 1"
+        : "SELECT user_id, password_hash FROM [user] WHERE email = ? LIMIT 1",
+      [userId || email]
+    );
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({ success: false, message: "找不到該使用者" });
+    }
+
+    const user = users[0];
+    const isCurrentValid = verifyPassword(currentPassword, user.password_hash);
+    if (!isCurrentValid) {
+      return res.status(400).json({ success: false, message: "目前密碼不正確" });
+    }
+
+    const secureHash = hashPassword(newPassword);
+    await db.query("UPDATE [user] SET password_hash = ? WHERE user_id = ?", [
+      secureHash,
+      user.user_id,
+    ]);
+
+    return res.json({ success: true, message: "密碼已成功修改！" });
+  } catch (err) {
+    console.error("Change password error:", err);
+    return res.status(500).json({ success: false, message: "修改密碼失敗", error: err.message });
+  }
+});
+
+// =========================================================================
+// 🚀 7. 刪除帳號 (Delete Account)
+// =========================================================================
+router.post("/delete-account", async (req, res) => {
+  const userId = req.body.userId || req.body.user_id;
+  const email = req.body.email ? String(req.body.email).trim().toLowerCase() : "";
+
+  if (!userId && !email) {
+    return res.status(400).json({ success: false, message: "缺少使用者標識" });
+  }
+
+  try {
+    const [users] = await db.query(
+      userId
+        ? "SELECT user_id FROM [user] WHERE user_id = ? LIMIT 1"
+        : "SELECT user_id FROM [user] WHERE email = ? LIMIT 1",
+      [userId || email]
+    );
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({ success: false, message: "找不到該使用者" });
+    }
+
+    const targetId = users[0].user_id;
+    // 軟刪除：標記狀態為 DELETED 並更新登出
+    await db.query("UPDATE [user] SET status = 'DELETED', last_login = GETDATE() WHERE user_id = ?", [
+      targetId,
+    ]);
+
+    return res.json({ success: true, message: "帳號已成功註銷移除" });
+  } catch (err) {
+    console.error("Delete account error:", err);
+    return res.status(500).json({ success: false, message: "刪除帳號失敗", error: err.message });
+  }
+});
+
 
 // =========================================================================
 // 🚀 6. 同步重設後的密碼到 MySQL/MSSQL (Sync Password) - 支援 Hash 加密儲存
@@ -500,21 +584,23 @@ router.post("/google-login", async (req, res) => {
       [googleUser.email]
     );
 
+    const username = `${googleUser.displayName}_${googleUser.uid.slice(-6)}`;
+
     if (existingUsers.length > 0) {
       const user = existingUsers[0];
+      // 🔒 自動更新 username，修復之前歷史儲存留下的 '???' 問號亂碼
       await db.query(
-        "UPDATE [user] SET last_login = GETDATE(), is_verified = 1, status = 'ACTIVE' WHERE user_id = ?",
-        [user.user_id]
+        "UPDATE [user] SET username = ?, last_login = GETDATE(), is_verified = 1, status = 'ACTIVE' WHERE user_id = ?",
+        [username, user.user_id]
       );
 
       return res.json({
         success: true,
         message: "Google 登入成功",
-        data: { ...user, status: "ACTIVE" },
+        data: { ...user, username, status: "ACTIVE" },
       });
     }
 
-    const username = `${googleUser.displayName}_${googleUser.uid.slice(-6)}`;
     const customerId = buildCustomerId("GOOGLE");
 
     await db.query(
@@ -885,18 +971,20 @@ const handleLineCallback = async (req, res) => {
     const lineUserId = String(profile.userId);
     const displayName = String(profile.displayName || "LINE User").trim();
     const lineEmail = `line_${lineUserId}@line.local`;
+    const username = `${displayName}_${lineUserId.slice(-6)}`;
+
     const [existingRows] = await db.query(
       "SELECT user_id FROM [user] WHERE email = ? LIMIT 1",
       [lineEmail]
     );
 
     if (existingRows.length > 0) {
+      // 🔒 自動更新 username，修復之前儲存留下的 '???' 問號亂碼
       await db.query(
-        "UPDATE [user] SET last_login = GETDATE(), status = 'ACTIVE' WHERE user_id = ?",
-        [existingRows[0].user_id]
+        "UPDATE [user] SET username = ?, last_login = GETDATE(), status = 'ACTIVE' WHERE user_id = ?",
+        [username, existingRows[0].user_id]
       );
     } else {
-      const username = `${displayName}_${lineUserId.slice(-6)}`;
 
       try {
         await db.query(
@@ -1030,6 +1118,7 @@ const handleGoogleCallback = async (req, res) => {
     const email = String(profile.email).trim().toLowerCase();
     const displayName = String(profile.name || email.split("@")[0]).trim();
     const googleId = String(profile.sub || "");
+    const username = `${displayName}_${googleId.slice(-6)}`;
 
     const [existingRows] = await db.query(
       "SELECT user_id FROM [user] WHERE email = ? LIMIT 1",
@@ -1037,12 +1126,12 @@ const handleGoogleCallback = async (req, res) => {
     );
 
     if (existingRows.length > 0) {
+      // 🔒 自動更新 username，修復之前儲存留下的 '???' 問號亂碼
       await db.query(
-        "UPDATE [user] SET last_login = GETDATE(), is_verified = 1, status = 'ACTIVE' WHERE user_id = ?",
-        [existingRows[0].user_id]
+        "UPDATE [user] SET username = ?, last_login = GETDATE(), is_verified = 1, status = 'ACTIVE' WHERE user_id = ?",
+        [username, existingRows[0].user_id]
       );
     } else {
-      const username = `${displayName}_${googleId.slice(-6)}`;
       const customerId = buildCustomerId("GOOGLE");
       await db.query(
         "INSERT INTO [user] (username, email, password_hash, membership_level, is_verified, status, customer_id, created_at, last_login) VALUES (?, ?, ?, 'FREE', 1, 'ACTIVE', ?, GETDATE(), GETDATE())",

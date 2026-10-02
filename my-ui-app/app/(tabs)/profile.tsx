@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import {
   Alert,
   Image,
+  Linking,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -95,7 +96,8 @@ export default function ProfileScreen() {
       description: "maipian.aishield@gmail.com",
       icon: "mail-outline",
       label: "客服 E-mail",
-      onPress: () => showComingSoon("客服 E-mail"),
+      onPress: () =>
+        void Linking.openURL("mailto:maipian.aishield@gmail.com?subject=AI%20Shield%20客服諮詢"),
     },
     {
       description: "離開目前帳號",

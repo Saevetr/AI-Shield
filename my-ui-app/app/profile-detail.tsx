@@ -14,7 +14,13 @@ import {
   View,
 } from "react-native";
 
-import { getSavedProfile, saveProfile, syncProfileWithBackend } from "@/utils/profile";
+import { logout } from "@/utils/auth";
+import {
+  getSavedProfile,
+  isThirdPartyUser,
+  saveProfile,
+  syncProfileWithBackend,
+} from "@/utils/profile";
 
 const monthNames = [
   "January",
@@ -112,8 +118,8 @@ export default function ProfileDetailScreen() {
   }, []);
 
   const isThirdParty = isThirdPartyUser({ customerId, email, customer_id: customerId });
-  // 🔒 偵測到是 Google 或 LINE 登入時，Gmail 設定為空白
-  const displayEmail = isThirdParty ? "" : email;
+  // 🔒 偵測到是 Google 或 LINE 登入時，Gmail 依樣顯示「尚未設定」
+  const displayEmail = isThirdParty ? "尚未設定" : (email || "尚未設定");
 
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -135,7 +141,7 @@ export default function ProfileDetailScreen() {
   const basicRows = [
     { action: "name", label: "姓名", value: name || "尚未設定" },
     { action: "phone", label: "電話", value: phone || "尚未設定" },
-    { action: "email", label: "Gmail", value: displayEmail || "" },
+    { action: "email", label: "Gmail", value: displayEmail },
     { action: "birthday", label: "生日", value: birthday || "尚未設定" },
     { action: "gender", label: "性別", value: gender || "尚未設定" },
   ];
@@ -388,7 +394,7 @@ export default function ProfileDetailScreen() {
     }
   };
 
-  const handleChangePassword = () => {
+  const handleChangePassword = async () => {
     if (!currentPassword) {
       Alert.alert("修改失敗", "請輸入目前密碼");
       return;
@@ -404,11 +410,62 @@ export default function ProfileDetailScreen() {
       return;
     }
 
-    setShowPasswordModal(false);
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    Alert.alert("已送出", "密碼修改功能畫面已完成，接下來可以串接 Firebase 更新密碼");
+    try {
+      const res = await fetch(`${API_URL}/api/auth/change-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: originalEmail,
+          currentPassword,
+          newPassword,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "目前密碼不正確或修改失敗");
+      }
+
+      setShowPasswordModal(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      Alert.alert("修改成功", "您的密碼已成功更新！");
+    } catch (err: any) {
+      Alert.alert("修改失敗", err.message || "無法更新密碼");
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      "確認刪除帳號",
+      "此動作無法還原，您的個人資料與紀錄將被永久註銷。是否確定刪除？",
+      [
+        { text: "取消", style: "cancel" },
+        {
+          text: "確定註銷",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const res = await fetch(`${API_URL}/api/auth/delete-account`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: originalEmail }),
+              });
+              const data = await res.json();
+              if (!res.ok || !data.success) {
+                throw new Error(data.message || "註銷失敗");
+              }
+              await logout();
+              Alert.alert("帳號已註銷", "帳號已成功移除，即將返回登入頁");
+              router.replace("/login");
+            } catch (err: any) {
+              Alert.alert("刪除失敗", err.message || "無法連線伺服器註銷帳號");
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -514,6 +571,11 @@ export default function ProfileDetailScreen() {
               ]}
               activeOpacity={0.75}
               onPress={() => {
+                if (row.danger) {
+                  handleDeleteAccount();
+                  return;
+                }
+
                 if (row.action === "binding") {
                   setShowBindingPicker(true);
                   return;
