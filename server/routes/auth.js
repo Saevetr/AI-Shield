@@ -614,6 +614,48 @@ router.post("/bind-oauth", async (req, res) => {
     return res.status(500).json({ success: false, message: "綁定失敗", error: err.message });
   }
 });
+// =========================================================================
+// 🚀 9. 升級 VIP 守護會員 (Upgrade Membership Level)
+// =========================================================================
+router.post("/upgrade-vip", async (req, res) => {
+  const userId = req.body.userId || req.body.user_id;
+  const email = req.body.email ? String(req.body.email).trim().toLowerCase() : "";
+
+  if (!userId && !email) {
+    return res.status(400).json({ success: false, message: "缺少使用者標識" });
+  }
+
+  try {
+    const [users] = await db.query(
+      userId
+        ? "SELECT user_id, username, email, phone, membership_level FROM [user] WHERE user_id = ? LIMIT 1"
+        : "SELECT user_id, username, email, phone, membership_level FROM [user] WHERE email = ? LIMIT 1",
+      [userId || email]
+    );
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({ success: false, message: "找不到該使用者" });
+    }
+
+    const targetUser = users[0];
+    await db.query("UPDATE [user] SET membership_level = 'VIP' WHERE user_id = ?", [
+      targetUser.user_id,
+    ]);
+
+    return res.json({
+      success: true,
+      message: "恭喜！您已成功升級為 VIP 守護會員！",
+      data: {
+        user_id: targetUser.user_id,
+        membership_level: "VIP",
+      },
+    });
+  } catch (err) {
+    console.error("Upgrade VIP error:", err);
+    return res.status(500).json({ success: false, message: "升級 VIP 失敗", error: err.message });
+  }
+});
+
 
 
 

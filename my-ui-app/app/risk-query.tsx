@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { getCurrentUser } from "@/utils/auth";
 
 import { riskQueryStyles as styles } from "../styles/app.styles";
 
@@ -195,10 +196,14 @@ export default function RiskQueryScreen() {
     if (!result) return;
 
     try {
+      const currentUser = await getCurrentUser();
+      const currentUserId = currentUser?.user_id || currentUser?.userId || null;
+
       const response = await fetch(`${API_BASE}/api/check/blacklist`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          userId: currentUserId,
           type: result.kind === "phone" ? "電話" : "LINE ID",
           value: result.value,
           note: "使用者從查詢結果加入黑名單",
@@ -220,10 +225,17 @@ export default function RiskQueryScreen() {
     if (!result || result.kind !== "line") return;
 
     try {
+      const currentUser = await getCurrentUser();
+      const currentUserId = currentUser?.user_id || currentUser?.userId || null;
+
       const response = await fetch(`${API_BASE}/api/check/report-line`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lineId: result.value, reason: result.message, userId: 5 }),
+        body: JSON.stringify({
+          lineId: result.value,
+          reason: result.message,
+          userId: currentUserId,
+        }),
       });
       const data = await response.json().catch(() => ({}));
 

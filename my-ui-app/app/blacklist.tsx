@@ -15,6 +15,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { getCurrentUser } from "@/utils/auth";
 
 const API_BASE =
   process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
@@ -86,11 +87,14 @@ export default function BlacklistScreen() {
   const loadBlacklist = useCallback(async () => {
     try {
       setLoading(true);
+      const currentUser = await getCurrentUser();
+      const currentUserId = currentUser?.user_id || currentUser?.userId || "";
 
-      const url =
-        activeTab === "全部"
-          ? `${API_BASE}/api/check/blacklist`
-          : `${API_BASE}/api/check/blacklist?type=${encodeURIComponent(activeTab)}`;
+      let url = `${API_BASE}/api/check/blacklist?`;
+      const queryParts = [];
+      if (currentUserId) queryParts.push(`userId=${encodeURIComponent(currentUserId)}`);
+      if (activeTab !== "全部") queryParts.push(`type=${encodeURIComponent(activeTab)}`);
+      url += queryParts.join("&");
 
       const res = await fetch(url);
 
@@ -145,6 +149,8 @@ export default function BlacklistScreen() {
 
     try {
       setSaving(true);
+      const currentUser = await getCurrentUser();
+      const currentUserId = currentUser?.user_id || currentUser?.userId || null;
 
       const res = await fetch(`${API_BASE}/api/check/blacklist`, {
         method: "POST",
@@ -152,6 +158,7 @@ export default function BlacklistScreen() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          userId: currentUserId,
           type: newType,
           value,
           note: note || "使用者自行加入",
@@ -178,7 +185,13 @@ export default function BlacklistScreen() {
 
   const handleRemove = async (item: BlacklistItem) => {
     try {
-      const res = await fetch(`${API_BASE}/api/check/blacklist/${item.id}`, {
+      const currentUser = await getCurrentUser();
+      const currentUserId = currentUser?.user_id || currentUser?.userId || "";
+      const deleteUrl = currentUserId
+        ? `${API_BASE}/api/check/blacklist/${item.id}?userId=${encodeURIComponent(currentUserId)}`
+        : `${API_BASE}/api/check/blacklist/${item.id}`;
+
+      const res = await fetch(deleteUrl, {
         method: "DELETE",
       });
 

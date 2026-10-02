@@ -285,9 +285,18 @@ const mapBlacklistItem = (row) => {
 
 router.get("/blacklist", async (req, res) => {
   try {
-    const [rows] = await db.query(
-      "SELECT blacklist_id, blacklist_type, blacklist_value, note, created_at FROM blacklist ORDER BY created_at DESC"
-    );
+    const userId = req.query.userId || req.query.user_id;
+    let sqlText = "SELECT blacklist_id, blacklist_type, blacklist_value, note, created_at FROM blacklist";
+    const sqlParams = [];
+
+    // 🔒 黑名單非全域：若傳入 userId 則只查詢該使用者的個人黑名單
+    if (userId) {
+      sqlText += " WHERE user_id = ?";
+      sqlParams.push(userId);
+    }
+    sqlText += " ORDER BY created_at DESC";
+
+    const [rows] = await db.query(sqlText, sqlParams);
     const requestedType = String(req.query.type || "");
     const items = rows
       .map(mapBlacklistItem)
@@ -305,6 +314,7 @@ router.get("/blacklist", async (req, res) => {
 });
 
 router.post("/blacklist", async (req, res) => {
+  const userId = req.body.userId || req.body.user_id || null;
   const value = String(req.body.value || req.body.lineId || "").trim();
   const requestedType = String(req.body.type || (req.body.lineId ? "LINE ID" : ""));
   const blacklistType = requestedType === "電話" ? "PHONE" : "LINE";
@@ -315,22 +325,41 @@ router.post("/blacklist", async (req, res) => {
   }
 
   try {
-    const [existingRows] = await db.query(
-      "SELECT blacklist_id FROM blacklist WHERE LOWER(LTRIM(RTRIM(blacklist_value))) = LOWER(?) LIMIT 1",
-      [value]
-    );
+    let checkSql = "SELECT blacklist_id FROM blacklist WHERE LOWER(LTRIM(RTRIM(blacklist_value))) = LOWER(?)";
+    const checkParams = [value];
+    if (userId) {
+      checkSql += " AND user_id = ?";
+      checkParams.push(userId);
+    }
+    checkSql += " LIMIT 1";
+
+    const [existingRows] = await db.query(checkSql, checkParams);
 
     if (existingRows.length > 0) {
-      return res.status(409).json({ success: false, message: "此資料已在黑名單中" });
+      return res.status(409).json({ success: false, message: "此資料已在您的黑名單中" });
     }
 
-    const [createdRows] = await db.query(
-      `INSERT INTO blacklist (blacklist_type, blacklist_value, note, created_at)
-       OUTPUT INSERTED.blacklist_id, INSERTED.blacklist_type,
-         INSERTED.blacklist_value, INSERTED.note, INSERTED.created_at
-       VALUES (?, ?, ?, GETDATE())`,
-      [blacklistType, value, note]
-    );
+    let createdRows;
+    try {
+      const [resRows] = await db.query(
+        `INSERT INTO blacklist (user_id, blacklist_type, blacklist_value, note, created_at)
+         OUTPUT INSERTED.blacklist_id, INSERTED.blacklist_type,
+           INSERTED.blacklist_value, INSERTED.note, INSERTED.created_at
+         VALUES (?, ?, ?, ?, GETDATE())`,
+        [userId, blacklistType, value, note]
+      );
+      createdRows = resRows;
+    } catch (insertErr) {
+      console.warn("Blacklist insert with user_id fallback:", insertErr.message);
+      const [resRows] = await db.query(
+        `INSERT INTO blacklist (blacklist_type, blacklist_value, note, created_at)
+         OUTPUT INSERTED.blacklist_id, INSERTED.blacklist_type,
+           INSERTED.blacklist_value, INSERTED.note, INSERTED.created_at
+         VALUES (?, ?, ?, GETDATE())`,
+        [blacklistType, value, note]
+      );
+      createdRows = resRows;
+    }
 
     return res.status(201).json({
       success: true,
@@ -345,19 +374,25 @@ router.post("/blacklist", async (req, res) => {
 
 router.delete("/blacklist/:id", async (req, res) => {
   const id = Number(req.params.id);
+  const userId = req.query.userId || req.query.user_id || req.body?.userId || null;
 
   if (!Number.isInteger(id) || id <= 0) {
     return res.status(400).json({ success: false, message: "無效的黑名單編號" });
   }
 
   try {
-    const [deletedRows] = await db.query(
-      "DELETE FROM blacklist OUTPUT DELETED.blacklist_id WHERE blacklist_id = ?",
-      [id]
-    );
+    let deleteSql = "DELETE FROM blacklist OUTPUT DELETED.blacklist_id WHERE blacklist_id = ?";
+    const deleteParams = [id];
+
+    if (userId) {
+      deleteSql += " AND (user_id = ? OR user_id IS NULL)";
+      deleteParams.push(userId);
+    }
+
+    const [deletedRows] = await db.query(deleteSql, deleteParams);
 
     if (deletedRows.length === 0) {
-      return res.status(404).json({ success: false, message: "找不到黑名單資料" });
+      return res.status(404).json({ success: false, message: "找不到該筆黑名單資料或無刪除權限" });
     }
 
     return res.json({ success: true, message: "已移除黑名單" });
@@ -370,6 +405,7 @@ router.delete("/blacklist/:id", async (req, res) => {
 router.post("/report-line", async (req, res) => {
   const lineId = normalizeLineId(req.body.lineId);
   const reason = String(req.body.reason || "使用者主動通報").trim();
+  const userId = req.body.userId || req.body.user_id || null;
 
   if (lineId.length < 3) {
     return res.status(400).json({ success: false, message: "請輸入有效 LINE ID" });
@@ -382,16 +418,42 @@ router.post("/report-line", async (req, res) => {
     );
 
     if (existingRows.length === 0) {
-      await db.query(
-        "INSERT INTO blacklist (blacklist_type, blacklist_value, note, created_at) VALUES ('LINE', ?, ?, GETDATE())",
-        [lineId, `使用者通報：${reason}`]
-      );
+      try {
+        await db.query(
+          "INSERT INTO blacklist (user_id, blacklist_type, blacklist_value, note, created_at) VALUES (?, 'LINE', ?, ?, GETDATE())",
+          [userId, lineId, `使用者通報：${reason}`]
+        );
+      } catch (err) {
+        await db.query(
+          "INSERT INTO blacklist (blacklist_type, blacklist_value, note, created_at) VALUES ('LINE', ?, ?, GETDATE())",
+          [lineId, `使用者通報：${reason}`]
+        );
+      }
     }
 
     return res.json({ success: true, message: "通報成功", lineId });
   } catch (error) {
     console.error("Failed to report LINE ID:", error);
     return res.status(500).json({ success: false, message: "通報寫入失敗" });
+  }
+});
+
+// 取得通報紀錄端點
+router.get("/reports", async (req, res) => {
+  const userId = req.query.userId || req.query.user_id;
+  try {
+    let sqlText = "SELECT blacklist_id as id, blacklist_value as target, blacklist_type as type, note as reason, created_at, '已確認' as status, 'high' as risk FROM blacklist WHERE note LIKE '%通報%'";
+    const params = [];
+    if (userId) {
+      sqlText += " AND (user_id = ? OR user_id IS NULL)";
+      params.push(userId);
+    }
+    sqlText += " ORDER BY created_at DESC";
+    const [rows] = await db.query(sqlText, params);
+    return res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error("Failed to load reports:", error);
+    return res.status(500).json({ success: false, message: "讀取通報紀錄失敗" });
   }
 });
 

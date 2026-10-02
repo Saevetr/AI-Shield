@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Text } from "@/components/app-text";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   SafeAreaView,
   ScrollView,
@@ -9,6 +10,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { getCurrentUser } from "@/utils/auth";
+
+const API_BASE =
+  process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
 
 const filters = ["全部", "審核中", "已確認", "已退回"] as const;
 
@@ -44,7 +49,7 @@ const formatReportTarget = (report: ReportItem) => {
   return report.target;
 };
 
-const reports: ReportItem[] = [
+const defaultReports: ReportItem[] = [
   {
     id: "r1",
     target: "+886 987 654 321",
@@ -62,15 +67,6 @@ const reports: ReportItem[] = [
     status: "審核中",
     risk: "medium",
     date: "昨天 18:06",
-  },
-  {
-    id: "r3",
-    target: "0223456789",
-    type: "電話",
-    reason: "陌生來電推銷貸款",
-    status: "已退回",
-    risk: "low",
-    date: "5/25 09:41",
   },
 ];
 
@@ -116,6 +112,42 @@ const riskStyleMap: Record<ReportRisk, { color: string; label: string }> = {
 
 export default function ReportsScreen() {
   const [activeFilter, setActiveFilter] = useState<Filter>("全部");
+  const [reports, setReports] = useState<ReportItem[]>(defaultReports);
+  const [loading, setLoading] = useState(false);
+
+  const loadReports = useCallback(async () => {
+    try {
+      setLoading(true);
+      const user = await getCurrentUser();
+      const userId = user?.user_id || user?.userId || "";
+      const url = userId
+        ? `${API_BASE}/api/check/reports?userId=${encodeURIComponent(userId)}`
+        : `${API_BASE}/api/check/reports`;
+
+      const res = await fetch(url);
+      const data = await res.json();
+      if (res.ok && data.success && Array.isArray(data.data) && data.data.length > 0) {
+        const fetchedReports: ReportItem[] = data.data.map((r: any) => ({
+          id: String(r.id),
+          target: String(r.target || ""),
+          type: (r.type === "PHONE" ? "電話" : "LINE ID") as "電話" | "LINE ID",
+          reason: String(r.reason || "使用者通報"),
+          status: (r.status || "已確認") as ReportStatus,
+          risk: (r.risk || "high") as ReportRisk,
+          date: r.created_at ? new Date(r.created_at).toLocaleDateString("zh-TW") : "近期",
+        }));
+        setReports(fetchedReports);
+      }
+    } catch {
+      // keep fallback
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadReports();
+  }, [loadReports]);
 
   const visibleReports = useMemo(() => {
     if (activeFilter === "全部") {
@@ -123,7 +155,7 @@ export default function ReportsScreen() {
     }
 
     return reports.filter((report) => report.status === activeFilter);
-  }, [activeFilter]);
+  }, [activeFilter, reports]);
 
   const confirmedCount = reports.filter((report) => report.status === "已確認").length;
   const pendingCount = reports.filter((report) => report.status === "審核中").length;

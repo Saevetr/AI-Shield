@@ -22,10 +22,15 @@ import {
 import { logout } from "@/utils/auth";
 import {
   getSavedProfile,
-  isThirdPartyUser,
   saveProfile,
   syncProfileWithBackend,
 } from "@/utils/profile";
+
+const isThirdPartyAccount = (cid?: string, mail?: string) => {
+  const c = String(cid || "").toUpperCase();
+  const m = String(mail || "").toLowerCase();
+  return c.startsWith("GOOGLE") || c.startsWith("LINE") || m.endsWith("@line.local");
+};
 
 const monthNames = [
   "January",
@@ -134,7 +139,7 @@ export default function ProfileDetailScreen() {
     };
   }, []);
 
-  const isThirdParty = isThirdPartyUser({ customerId, email, customer_id: customerId });
+  const isThirdParty = isThirdPartyAccount(customerId, email);
   // 🔒 偵測到是 Google 或 LINE 登入時，Gmail 依樣顯示「尚未設定」
   const displayEmail = isThirdParty ? "尚未設定" : (email || "尚未設定");
 
@@ -532,7 +537,6 @@ export default function ProfileDetailScreen() {
           const data = await res.json();
           if (res.ok && data.success) {
             setIsGoogleBound(true);
-            if (data.data?.avatar_url) setAvatarUri(data.data.avatar_url);
             Alert.alert("綁定成功", "已成功綁定 Google 帳號！");
           } else {
             throw new Error(data.message || "綁定失敗");
@@ -563,7 +567,6 @@ export default function ProfileDetailScreen() {
           const data = await res.json();
           if (res.ok && data.success) {
             setIsGoogleBound(true);
-            if (data.data?.avatar_url) setAvatarUri(data.data.avatar_url);
             Alert.alert("綁定成功", "已成功綁定 Google 帳號！");
           } else {
             throw new Error(data.message || "綁定失敗");
@@ -612,7 +615,6 @@ export default function ProfileDetailScreen() {
           const data = await res.json();
           if (res.ok && data.success) {
             setIsLineBound(true);
-            if (data.data?.avatar_url) setAvatarUri(data.data.avatar_url);
             Alert.alert("綁定成功", "已成功綁定 LINE 帳號！");
           } else {
             throw new Error(data.message || "綁定失敗");
