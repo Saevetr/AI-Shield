@@ -14,7 +14,7 @@ import {
   View,
 } from "react-native";
 
-import { getSavedProfile, saveProfile } from "@/utils/profile";
+import { getSavedProfile, saveProfile, syncProfileWithBackend } from "@/utils/profile";
 
 const monthNames = [
   "January",
@@ -39,11 +39,11 @@ export default function ProfileDetailScreen() {
   const API_URL =
     process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
 
-  const [name, setName] = useState("麥片AI Shield");
-  const [phone, setPhone] = useState("0912 345 678");
-  const [email, setEmail] = useState("maipian.aishield@gmail.com");
-  const [originalPhone, setOriginalPhone] = useState("0912 345 678");
-  const [originalEmail, setOriginalEmail] = useState("maipian.aishield@gmail.com");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [originalPhone, setOriginalPhone] = useState("");
+  const [originalEmail, setOriginalEmail] = useState("");
   const [birthday, setBirthday] = useState("");
   const [gender, setGender] = useState("");
   const [avatarUri, setAvatarUri] = useState("");
@@ -72,20 +72,40 @@ export default function ProfileDetailScreen() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   useEffect(() => {
-    const loadSavedProfile = async () => {
-      const savedProfile = await getSavedProfile();
+    let isMounted = true;
 
-      setName(savedProfile.name);
-      setPhone(savedProfile.phone);
-      setEmail(savedProfile.email);
-      setOriginalPhone(savedProfile.phone);
-      setOriginalEmail(savedProfile.email);
-      setBirthday(savedProfile.birthday);
-      setGender(savedProfile.gender);
-      setAvatarUri(savedProfile.avatarUri);
+    const loadSavedProfile = async () => {
+      // 1. 先讀取本地快取顯示
+      const savedProfile = await getSavedProfile();
+      if (isMounted) {
+        setName(savedProfile.name);
+        setPhone(savedProfile.phone);
+        setEmail(savedProfile.email);
+        setOriginalPhone(savedProfile.phone);
+        setOriginalEmail(savedProfile.email);
+        setBirthday(savedProfile.birthday);
+        setGender(savedProfile.gender);
+        setAvatarUri(savedProfile.avatarUri);
+      }
+
+      // 2. 🛡️ 主動連線後端資料庫取得最新真實紀錄
+      const dbProfile = await syncProfileWithBackend();
+      if (isMounted) {
+        setName(dbProfile.name);
+        setPhone(dbProfile.phone);
+        setEmail(dbProfile.email);
+        setOriginalPhone(dbProfile.phone);
+        setOriginalEmail(dbProfile.email);
+        if (dbProfile.birthday) setBirthday(dbProfile.birthday);
+        if (dbProfile.gender) setGender(dbProfile.gender);
+      }
     };
 
     void loadSavedProfile();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const yearOptions = useMemo(() => {

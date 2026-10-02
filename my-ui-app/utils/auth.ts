@@ -2,6 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const KEY = "isLoggedIn";
 const LEGACY_WEB_KEY = "isLogin";
+const USER_KEY = "current_user_data";
+const LEGACY_USER_KEY = "user";
 
 const getWebStorage = () => {
   try {
@@ -21,16 +23,61 @@ const parseLoginValue = (value: string | null) => {
   }
 };
 
-export const setLogin = async (value: boolean) => {
+export const setCurrentUser = async (user: any) => {
+  if (!user) return;
+  const userJson = JSON.stringify(user);
+  const storage = getWebStorage();
+
+  if (storage) {
+    storage.setItem(USER_KEY, userJson);
+    storage.setItem(LEGACY_USER_KEY, userJson);
+  }
+
+  await AsyncStorage.setItem(USER_KEY, userJson);
+};
+
+export const getCurrentUser = async (): Promise<any | null> => {
+  const storage = getWebStorage();
+  const webUserJson = storage?.getItem(USER_KEY) ?? storage?.getItem(LEGACY_USER_KEY);
+
+  if (webUserJson) {
+    try {
+      return JSON.parse(webUserJson);
+    } catch {
+      // ignore
+    }
+  }
+
+  const asyncUserJson = await AsyncStorage.getItem(USER_KEY);
+  if (asyncUserJson) {
+    try {
+      return JSON.parse(asyncUserJson);
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
+};
+
+export const setLogin = async (value: boolean, user?: any) => {
   const serializedValue = JSON.stringify(value);
   const storage = getWebStorage();
 
   if (storage) {
     storage.setItem(KEY, serializedValue);
     storage.setItem(LEGACY_WEB_KEY, serializedValue);
+    if (user) {
+      const userJson = JSON.stringify(user);
+      storage.setItem(USER_KEY, userJson);
+      storage.setItem(LEGACY_USER_KEY, userJson);
+    }
   }
 
   await AsyncStorage.setItem(KEY, serializedValue);
+  if (user) {
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
+  }
 };
 
 export const getLogin = async () => {
@@ -51,8 +98,11 @@ export const logout = async () => {
   if (storage) {
     storage.removeItem(KEY);
     storage.removeItem(LEGACY_WEB_KEY);
-    storage.removeItem("user");
+    storage.removeItem(LEGACY_USER_KEY);
+    storage.removeItem(USER_KEY);
   }
 
   await AsyncStorage.removeItem(KEY);
+  await AsyncStorage.removeItem(USER_KEY);
+  await AsyncStorage.removeItem("profile_data");
 };

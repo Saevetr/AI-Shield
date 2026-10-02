@@ -75,7 +75,7 @@ export default function Login() {
       throw new Error(data.message || `HTTP ${res.status}`);
     }
 
-    await setLogin(true);
+    await setLogin(true, data.data);
 
     const globalObject = globalThis as any;
 
@@ -123,7 +123,7 @@ export default function Login() {
             throw new Error(data.message || "Google 登入驗證失敗");
           }
 
-          await setLogin(true);
+          await setLogin(true, data.data);
           const globalObject = globalThis as any;
           if (globalObject.localStorage) {
             globalObject.localStorage.setItem("isLogin", "true");
@@ -179,7 +179,7 @@ export default function Login() {
             throw new Error(data.message || "LINE 登入驗證失敗");
           }
 
-          await setLogin(true);
+          await setLogin(true, data.data);
           const globalObject = globalThis as any;
           if (globalObject.localStorage) {
             globalObject.localStorage.setItem("isLogin", "true");
@@ -247,7 +247,7 @@ export default function Login() {
       }
 
       try {
-        await setLogin(true);
+        await setLogin(true, result.data);
         console.log("setLogin success");
       } catch (loginStateError) {
         console.log("setLogin failed, continue anyway:", loginStateError);

@@ -151,6 +151,54 @@ router.post("/login", async (req, res) => {
     });
   }
 });
+// =========================================================================
+// 🚀 取得使用者個人資料 (Get Profile from Database)
+// =========================================================================
+router.get("/profile", async (req, res) => {
+  const userId = req.query.userId || req.query.user_id;
+  const email = req.query.email ? String(req.query.email).trim().toLowerCase() : "";
+  const account = req.query.account ? String(req.query.account).trim() : "";
+
+  if (!userId && !email && !account) {
+    return res.status(400).json({ success: false, message: "缺少查詢標識 (userId / email / account)" });
+  }
+
+  try {
+    let querySql = "";
+    let queryParam = null;
+
+    if (userId) {
+      querySql = "SELECT user_id, username, email, phone, membership_level, status, customer_id, created_at, last_login, is_verified FROM [user] WHERE user_id = ? LIMIT 1";
+      queryParam = userId;
+    } else if (email) {
+      querySql = "SELECT user_id, username, email, phone, membership_level, status, customer_id, created_at, last_login, is_verified FROM [user] WHERE email = ? LIMIT 1";
+      queryParam = email;
+    } else {
+      querySql = "SELECT user_id, username, email, phone, membership_level, status, customer_id, created_at, last_login, is_verified FROM [user] WHERE (username = ? OR phone = ? OR email = ?) LIMIT 1";
+      queryParam = account;
+    }
+
+    const [rows] = await db.query(querySql, querySql.includes("OR") ? [account, account, account] : [queryParam]);
+
+    if (!rows || rows.length === 0) {
+      return res.status(404).json({ success: false, message: "找不到該使用者的資料庫紀錄" });
+    }
+
+    return res.json({
+      success: true,
+      message: "成功取得使用者個人資料",
+      data: rows[0],
+    });
+  } catch (error) {
+    console.error("❌ Get profile error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "無法從資料庫讀取個人資料",
+      error: error.message,
+    });
+  }
+});
+
 
 // =========================================================================
 // 🚀 2. 註冊功能 (Register) - 安全 Hash 儲存 + 正確初始化驗證狀態

@@ -14,7 +14,7 @@ import {
 
 import { logout } from "@/utils/auth";
 import { FONT_SIZE_OPTIONS, useFontSize } from "@/utils/fontSize";
-import { DEFAULT_PROFILE, getSavedProfile } from "@/utils/profile";
+import { DEFAULT_PROFILE, getSavedProfile, syncProfileWithBackend } from "@/utils/profile";
 
 type MenuRow = {
   badge?: string;
@@ -35,11 +35,23 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      const loadSavedAvatar = async () => {
-        setProfile(await getSavedProfile());
+      let isMounted = true;
+
+      const loadUserProfile = async () => {
+        // 1. 先讀取本地已保存的個人資料
+        const localData = await getSavedProfile();
+        if (isMounted) setProfile(localData);
+
+        // 2. 🛡️ 主動連接後端資料庫取得最新真實個人資料
+        const dbData = await syncProfileWithBackend();
+        if (isMounted) setProfile(dbData);
       };
 
-      void loadSavedAvatar();
+      void loadUserProfile();
+
+      return () => {
+        isMounted = false;
+      };
     }, [])
   );
 
