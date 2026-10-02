@@ -26,6 +26,21 @@ export const DEFAULT_PROFILE: SavedProfile = {
   membershipLevel: "FREE",
 };
 
+export const isThirdPartyUser = (user: any): boolean => {
+  if (!user) return false;
+  const cid = String(user.customerId || user.customer_id || "").toUpperCase();
+  const pass = String(user.password_hash || "").toUpperCase();
+  const email = String(user.email || "").toLowerCase();
+
+  return (
+    cid.startsWith("GOOGLE") ||
+    cid.startsWith("LINE") ||
+    pass.startsWith("GOOGLE:") ||
+    pass.startsWith("LINE:") ||
+    email.endsWith("@line.local")
+  );
+};
+
 /**
  * 從後端資料庫同步最新的個人資料
  */
@@ -50,12 +65,14 @@ export const syncProfileWithBackend = async (): Promise<SavedProfile> => {
     if (res.ok && result.success && result.data) {
       const dbUser = result.data;
       const currentSaved = await getSavedProfile();
+      const isThirdParty = isThirdPartyUser(dbUser) || isThirdPartyUser(currentUser);
 
       const syncedProfile: SavedProfile = {
         ...currentSaved,
         userId: dbUser.user_id,
         name: dbUser.username || currentSaved.name || "使用者",
-        email: dbUser.email || currentSaved.email,
+        // 🔒 偵測到是 Google 或 LINE 登入時，Gmail 設定為空白
+        email: isThirdParty ? "" : (dbUser.email || currentSaved.email),
         phone: dbUser.phone || currentSaved.phone,
         membershipLevel: dbUser.membership_level || "FREE",
         customerId: dbUser.customer_id,
@@ -77,14 +94,17 @@ export const getSavedProfile = async (): Promise<SavedProfile> => {
   const savedProfileJson = await AsyncStorage.getItem(PROFILE_DATA_KEY);
   const legacyAvatarUri = (await AsyncStorage.getItem(PROFILE_AVATAR_URI_KEY)) ?? "";
   const currentUser = await getCurrentUser();
+  const isThirdParty = isThirdPartyUser(currentUser);
 
   const baseProfile: SavedProfile = {
     ...DEFAULT_PROFILE,
     name: currentUser?.username || currentUser?.displayName || currentUser?.name || DEFAULT_PROFILE.name,
-    email: currentUser?.email || DEFAULT_PROFILE.email,
+    // 🔒 偵測到是 Google 或 LINE 登入時，Gmail 設定為空白
+    email: isThirdParty ? "" : (currentUser?.email || DEFAULT_PROFILE.email),
     phone: currentUser?.phone || DEFAULT_PROFILE.phone,
     membershipLevel: currentUser?.membership_level || DEFAULT_PROFILE.membershipLevel,
     userId: currentUser?.user_id || currentUser?.userId,
+    customerId: currentUser?.customer_id || currentUser?.customerId,
   };
 
   if (!savedProfileJson) {
@@ -96,17 +116,20 @@ export const getSavedProfile = async (): Promise<SavedProfile> => {
 
   try {
     const savedProfile = JSON.parse(savedProfileJson) as Partial<SavedProfile>;
+    const savedIsThirdParty = isThirdParty || isThirdPartyUser(savedProfile);
 
     return {
       ...baseProfile,
       ...savedProfile,
-      // 若已有登入資訊且本地名稱為預設時，優先使用登入者的真實名稱與信箱
       name: savedProfile.name && savedProfile.name !== "麥片AI Shield" && savedProfile.name !== "使用者"
         ? savedProfile.name
         : baseProfile.name,
-      email: savedProfile.email && savedProfile.email !== "maipian.aishield@gmail.com"
-        ? savedProfile.email
-        : baseProfile.email,
+      // 🔒 偵測到是 Google 或 LINE 登入時，Gmail 設定為空白
+      email: savedIsThirdParty
+        ? ""
+        : (savedProfile.email && savedProfile.email !== "maipian.aishield@gmail.com"
+            ? savedProfile.email
+            : baseProfile.email),
       phone: savedProfile.phone && savedProfile.phone !== "0912 345 678"
         ? savedProfile.phone
         : baseProfile.phone,

@@ -28,6 +28,25 @@ const dbConfig = {
 
 let poolPromise = null;
 
+const ensureUnicodeColumns = async (pool) => {
+  try {
+    // 確保 [user] 資料表的 username 支援 Unicode（中文、Emoji 與顏文字）
+    await pool.request().query(`
+      IF EXISTS (
+        SELECT 1 FROM sys.columns 
+        WHERE object_id = OBJECT_ID('[user]') 
+          AND name = 'username' 
+          AND system_type_id IN (175, 167)
+      )
+      BEGIN
+        ALTER TABLE [user] ALTER COLUMN [username] NVARCHAR(150) NULL;
+      END
+    `);
+  } catch (err) {
+    // 忽略特定環境權限問題
+  }
+};
+
 const getPool = async () => {
   // ⭐️ 核心修正：如果連線池存在，但它已經不是連接狀態，就將其清空重連
   if (poolPromise) {
@@ -61,7 +80,10 @@ const getPool = async () => {
     }
   });
 
-  poolPromise = pool.connect().catch((err) => {
+  poolPromise = pool.connect().then(async (connectedPool) => {
+    await ensureUnicodeColumns(connectedPool);
+    return connectedPool;
+  }).catch((err) => {
     console.error("❌ SQL Server connection failed:", err.message);
     poolPromise = null; // 連線失敗就清空
     throw err;
@@ -113,7 +135,20 @@ const query = async (queryText, params = []) => {
     const request = pool.request();
 
     params.forEach((value, index) => {
-      request.input(`p${index}`, value === undefined ? null : value);
+      if (typeof value === "string") {
+        // 🔒 強制使用 NVarChar，確保中文、顏文字、Emoji 不會被 SQL Server 轉換為問號 '?'
+        request.input(`p${index}`, sql.NVarChar, value);
+      } else if (typeof value === "number") {
+        if (Number.isInteger(value)) {
+          request.input(`p${index}`, sql.Int, value);
+        } else {
+          request.input(`p${index}`, sql.Float, value);
+        }
+      } else if (typeof value === "boolean") {
+        request.input(`p${index}`, sql.Bit, value ? 1 : 0);
+      } else {
+        request.input(`p${index}`, value === undefined ? null : value);
+      }
     });
 
     const sqlText = normalizeSql(queryText);

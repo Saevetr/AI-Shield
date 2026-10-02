@@ -42,6 +42,7 @@ export default function ProfileDetailScreen() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [customerId, setCustomerId] = useState("");
   const [originalPhone, setOriginalPhone] = useState("");
   const [originalEmail, setOriginalEmail] = useState("");
   const [birthday, setBirthday] = useState("");
@@ -81,6 +82,7 @@ export default function ProfileDetailScreen() {
         setName(savedProfile.name);
         setPhone(savedProfile.phone);
         setEmail(savedProfile.email);
+        setCustomerId(savedProfile.customerId || "");
         setOriginalPhone(savedProfile.phone);
         setOriginalEmail(savedProfile.email);
         setBirthday(savedProfile.birthday);
@@ -94,6 +96,7 @@ export default function ProfileDetailScreen() {
         setName(dbProfile.name);
         setPhone(dbProfile.phone);
         setEmail(dbProfile.email);
+        setCustomerId(dbProfile.customerId || "");
         setOriginalPhone(dbProfile.phone);
         setOriginalEmail(dbProfile.email);
         if (dbProfile.birthday) setBirthday(dbProfile.birthday);
@@ -107,6 +110,10 @@ export default function ProfileDetailScreen() {
       isMounted = false;
     };
   }, []);
+
+  const isThirdParty = isThirdPartyUser({ customerId, email, customer_id: customerId });
+  // 🔒 偵測到是 Google 或 LINE 登入時，Gmail 設定為空白
+  const displayEmail = isThirdParty ? "" : email;
 
   const yearOptions = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -126,16 +133,22 @@ export default function ProfileDetailScreen() {
   }, [calendarMonth]);
 
   const basicRows = [
-    { action: "name", label: "姓名", value: name },
-    { action: "phone", label: "電話", value: phone },
-    { action: "email", label: "Gmail", value: email },
+    { action: "name", label: "姓名", value: name || "尚未設定" },
+    { action: "phone", label: "電話", value: phone || "尚未設定" },
+    { action: "email", label: "Gmail", value: displayEmail || "" },
     { action: "birthday", label: "生日", value: birthday || "尚未設定" },
     { action: "gender", label: "性別", value: gender || "尚未設定" },
   ];
 
+  const bindingLabel = customerId.startsWith("GOOGLE")
+    ? "Google 帳號登入"
+    : customerId.startsWith("LINE")
+    ? "LINE 帳號登入"
+    : "帳號密碼登入";
+
   const securityRows = [
     { action: "password", icon: "key-outline", label: "修改密碼", value: "建議定期更新" },
-    { action: "binding", icon: "link-outline", label: "綁定方式", value: "Email 登入" },
+    { action: "binding", icon: "link-outline", label: "綁定方式", value: bindingLabel },
     { danger: true, icon: "trash-outline", label: "刪除帳號", value: "永久移除帳號資料" },
   ];
 
@@ -441,8 +454,8 @@ export default function ProfileDetailScreen() {
             </View>
           </TouchableOpacity>
 
-          <Text style={styles.name}>{name}</Text>
-          <Text style={styles.email}>{email}</Text>
+          <Text style={styles.name}>{name || "使用者"}</Text>
+          <Text style={styles.email}>{displayEmail || (isThirdParty ? bindingLabel : "尚未設定信箱")}</Text>
           <View style={styles.editHint}>
             <Ionicons name="information-circle-outline" size={14} color="#397bf2" />
             <Text style={styles.editHintText}>修改後需按右上儲存才會套用</Text>

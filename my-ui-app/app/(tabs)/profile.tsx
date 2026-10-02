@@ -138,8 +138,17 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.profileInfo}>
-            <Text style={styles.name}>{profile.name}</Text>
-            <Text style={styles.phone}>{profile.phone}</Text>
+            <Text style={styles.name}>{profile.name || "使用者"}</Text>
+            <Text style={styles.phone}>
+              {profile.phone ||
+                (profile.email
+                  ? profile.email
+                  : profile.customerId?.startsWith("LINE")
+                  ? "LINE 帳號登入"
+                  : profile.customerId?.startsWith("GOOGLE")
+                  ? "Google 帳號登入"
+                  : "尚未設定聯絡資訊")}
+            </Text>
             <View style={styles.statusPill}>
               <Ionicons name="shield-checkmark" size={14} color="#397bf2" />
               <Text style={styles.statusText}>帳號保護中</Text>
