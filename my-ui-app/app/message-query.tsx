@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { getCurrentUser } from "@/utils/auth";
 
 type RiskLevel = "high" | "medium" | "low";
 
@@ -156,6 +157,42 @@ export default function MessageQueryScreen() {
     }
   };
 
+  const handleAddToBlacklist = async () => {
+    if (!result) return;
+    try {
+      const user = await getCurrentUser();
+      const userId = user?.user_id || user?.userId || null;
+      const targetValue = messageText.slice(0, 50).trim();
+
+      const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com"}/api/check/blacklist`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          type: "LINE ID",
+          value: targetValue,
+          note: `可疑訊息：${result.message}`,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.success === false) {
+        throw new Error(data.message || "加入黑名單失敗");
+      }
+      Alert.alert("加入成功", "已將此可疑關鍵字/特徵加入您的個人黑名單！");
+    } catch (err: any) {
+      Alert.alert("加入失敗", err.message || "無法加入黑名單");
+    }
+  };
+
+  const handleShareReport = () => {
+    if (!result) return;
+    const summary = `【AI Shield 防詐警示】\n風險等級：${result.status}\n風險評分：${result.score}/100\n分析說明：${result.message}\n資料庫紀錄：${result.reason || "常見詐騙話術特徵"}`;
+    Alert.alert("反詐警示說明", summary, [
+      { text: "關閉", style: "cancel" },
+      { text: "前往通報", onPress: () => router.push("/risk-query?type=phone" as never) },
+    ]);
+  };
+
   const currentStyle = result ? riskStyleMap[result.level] : null;
   const safeScore = result ? Math.min(100, Math.max(0, result.score)) : 0;
 
@@ -250,6 +287,47 @@ export default function MessageQueryScreen() {
               <Text style={styles.infoText}>
                 {result.reason || "目前沒有命中資料庫中的高風險關鍵字。"}
               </Text>
+            </View>
+
+            {/* 🛡️ 行動與防護快捷操作列 */}
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  backgroundColor: "#ffffff",
+                  paddingVertical: 10,
+                  borderRadius: 10,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexDirection: "row",
+                  borderWidth: 1,
+                  borderColor: "#d1d5db",
+                  gap: 6,
+                }}
+                onPress={handleShareReport}
+                activeOpacity={0.78}
+              >
+                <Ionicons name="share-outline" size={17} color="#374151" />
+                <Text style={{ fontSize: 13, fontWeight: "700", color: "#374151" }}>警示說明</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  backgroundColor: "#ef4444",
+                  paddingVertical: 10,
+                  borderRadius: 10,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexDirection: "row",
+                  gap: 6,
+                }}
+                onPress={handleAddToBlacklist}
+                activeOpacity={0.82}
+              >
+                <Ionicons name="ban" size={17} color="#ffffff" />
+                <Text style={{ fontSize: 13, fontWeight: "800", color: "#ffffff" }}>加入黑名單</Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}

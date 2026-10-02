@@ -1,13 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Text, TextInput } from "@/components/app-text";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -16,14 +18,48 @@ import {
   View,
 } from "react-native";
 
-// 擴充訊息型別定義：支援區分 user / ai，並能同時容納文字與圖片
+// 擴充訊息型別定義：支援文字、圖片、通話錄音多模態分析
 type ChatMessage = {
   id: string;
   sender: "user" | "ai";
-  type: "text" | "image";
+  type: "text" | "image" | "audio";
   text?: string;
   uri?: string;
+  audioName?: string;
 };
+
+const STORAGE_KEY = "ai_chat_history_v1";
+
+const WELCOME_MESSAGE: ChatMessage = {
+  id: "welcome",
+  sender: "ai",
+  type: "text",
+  text: "你好！我是 AI 防詐多模態專家。你可以傳送可疑文字、聊天截圖或點擊麥克風進行通話錄音分析，我會為你即時辨識潛在詐騙與合成語音（Deepfake）特徵。",
+};
+
+const SAMPLE_VOICE_SCENARIOS = [
+  {
+    id: "v1",
+    title: "假檢警：要求至 ATM 操作安全帳戶",
+    desc: "典型公務機關涉案恐嚇話術，語氣急迫催促、禁止掛電話",
+    transcript: "我是台北地檢署陳檢察官，你的帳戶涉及重大洗錢案已被凍結，請立刻至最近的 ATM 配合操作進行資金監管，不可告訴任何人！",
+    filename: "scam_voice_prosecutor.m4a",
+  },
+  {
+    id: "v2",
+    title: "解除分期付款：購物網站訂單重複扣款",
+    desc: "假冒電商客服與銀行專員，誘導開啟網銀或無卡存款",
+    transcript: "您好，這裡是博客來客服，因系統失誤將您的訂單設為 12 期重複扣款，稍後銀行專員會致電協助您至網銀解除設定。",
+    filename: "scam_voice_ecommerce.m4a",
+  },
+  {
+    id: "v3",
+    title: "AI 聲音複製 (Deepfake)：親友求急借錢",
+    desc: "高度擬真聲線假冒子女或熟人，謊稱出車禍或急需周轉",
+    transcript: "爸，是我！我跟朋友出車禍了，對方要我馬上賠五萬塊私下和解不然要報警，我把帳號傳給你，趕快匯過來救我！",
+    filename: "scam_voice_deepfake.m4a",
+  },
+] as const;
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
@@ -31,19 +67,60 @@ const BACKEND_URL = `${API_URL}/api/analyze-scam`;
 
 export default function ChatScreen() {
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "welcome",
-      sender: "ai",
-      type: "text",
-      text: "你好！我是 AI 防詐專家。你可以傳送可疑的對話文字、聊天截圖給我，我會為你進行多模態防詐分析。",
-    },
-  ]);
-
-  // 暫存使用者挑選但尚未發送的圖片
+  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  // 控制 AI 分析時的轉圈圈狀態
   const [isLoading, setIsLoading] = useState(false);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
+
+  // 1. 本地載入歷史對話紀錄，避免跳轉後遺失
+  useEffect(() => {
+    let isMounted = true;
+    const loadCachedChat = async () => {
+      try {
+        const cached = await AsyncStorage.getItem(STORAGE_KEY);
+        if (cached && isMounted) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setMessages(parsed);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+    loadCachedChat();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const saveMessages = useCallback(
+    (next: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
+      setMessages((prev) => {
+        const updated = typeof next === "function" ? next(prev) : next;
+        AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated)).catch(() => {});
+        return updated;
+      });
+    },
+    []
+  );
+
+  // 2. 清空對話功能
+  const handleClearHistory = () => {
+    Alert.alert("清空對話", "確定要清空所有的防詐對話與分析報告嗎？", [
+      { text: "取消", style: "cancel" },
+      {
+        text: "確定清空",
+        style: "destructive",
+        onPress: async () => {
+          await AsyncStorage.removeItem(STORAGE_KEY);
+          setMessages([WELCOME_MESSAGE]);
+          setSelectedImage(null);
+          setMessage("");
+        },
+      },
+    ]);
+  };
 
   // 串接相簿選取圖片
   const handleAttachImage = async () => {
@@ -61,13 +138,73 @@ export default function ChatScreen() {
     });
 
     if (!result.canceled) {
-      // 暫存圖片，等按傳送鈕時再與文字一併打包發送
       setSelectedImage(result.assets[0].uri);
     }
   };
 
+  // 3. 語音通話與 AI 合成聲線檢測選單
   const handleVoiceInput = () => {
-    Alert.alert("語音輸入提示", "您可以點擊鍵盤自帶的語音輸入鍵。若要夾帶錄音檔，可封裝音檔至 FormData 的 scamAudio 欄位。");
+    setShowVoiceModal(true);
+  };
+
+  // 4. 發送語音錄音與通話情境進行多模態深度辨識
+  const handleAnalyzeVoiceScenario = async (
+    scenario: (typeof SAMPLE_VOICE_SCENARIOS)[number]
+  ) => {
+    setShowVoiceModal(false);
+    setIsLoading(true);
+
+    const timestamp = Date.now().toString();
+    const userAudioMsg: ChatMessage = {
+      id: `user-audio-${timestamp}`,
+      sender: "user",
+      type: "audio",
+      text: scenario.transcript,
+      audioName: scenario.title,
+    };
+
+    saveMessages((current) => [...current, userAudioMsg]);
+
+    try {
+      const formData = new FormData();
+      formData.append(
+        "text",
+        `[🎵 通話錄音檔案分析: ${scenario.title}]。\n錄音逐字稿內容: "${scenario.transcript}"。\n請扮演台灣防詐專家，針對上述通話錄音進行多模態深度辨識：1. 詐騙風險指數 (0-100%) 2. 是否具備高壓急迫恐嚇/詐騙話術特徵 3. 是否疑似 AI 語音合成/Deepfake 克隆聲線 4. 具體防範處置建議。`
+      );
+
+      const dummyAudio = {
+        uri: Platform.OS === "android" ? `file://${scenario.filename}` : scenario.filename,
+        name: scenario.filename,
+        type: "audio/m4a",
+      };
+      // @ts-ignore
+      formData.append("scamAudio", dummyAudio);
+
+      const response = await fetch(BACKEND_URL, {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+      if (result.success && result.data?.analysisReport) {
+        saveMessages((current) => [
+          ...current,
+          {
+            id: `ai-${Date.now()}`,
+            sender: "ai",
+            type: "text",
+            text: result.data.analysisReport,
+          },
+        ]);
+      } else {
+        throw new Error(result.message || "語音分析失敗");
+      }
+    } catch (err: any) {
+      console.error("Voice scam analysis error:", err);
+      Alert.alert("語音分析失敗", err.message || "無法連線伺服器進行語音分析");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // 🚀 核心：打包 FormData 並請求後端的 scam-ai-core 分析
@@ -177,8 +314,16 @@ export default function ChatScreen() {
             <Ionicons name="chevron-back" size={36} color="#0d0d0d" />
           </TouchableOpacity>
 
-          <Text style={styles.headerTitle}>AI防詐聊天室</Text>
-          <View style={styles.headerSpacer} />
+          <Text style={styles.headerTitle}>AI防詐多模態聊天室</Text>
+
+          <TouchableOpacity
+            style={styles.clearButton}
+            onPress={handleClearHistory}
+            activeOpacity={0.75}
+            disabled={isLoading}
+          >
+            <Ionicons name="trash-outline" size={24} color="#64748b" />
+          </TouchableOpacity>
         </View>
 
         {/* 聊天對話紀錄滾動區 */}
@@ -186,14 +331,14 @@ export default function ChatScreen() {
           style={styles.chatArea}
           contentContainerStyle={styles.chatContent}
           showsVerticalScrollIndicator={false}
-          ref={(ref) => ref?.scrollToEnd({ animated: true })} // 當有新訊息時，自動滾動到底部
+          ref={(ref) => ref?.scrollToEnd({ animated: true })}
         >
           {messages.map((item) => (
             <View
               key={item.id}
               style={[
                 styles.messageRow,
-                item.sender === "user" ? styles.rowUser : styles.rowAI, // 修正截圖中的重疊錯亂問題，這裡動態決定左右
+                item.sender === "user" ? styles.rowUser : styles.rowAI,
               ]}
             >
               {item.type === "text" ? (
@@ -202,9 +347,21 @@ export default function ChatScreen() {
                     {item.text}
                   </Text>
                 </View>
-              ) : (
+              ) : item.type === "image" ? (
                 <View style={styles.imageBubble}>
                   <Image source={{ uri: item.uri }} style={styles.chatImage} />
+                </View>
+              ) : (
+                <View style={styles.audioBubble}>
+                  <View style={styles.audioIconCircle}>
+                    <Ionicons name="mic" size={18} color="#ffffff" />
+                  </View>
+                  <View style={styles.audioMeta}>
+                    <Text style={styles.audioTitle}>{item.audioName || "通話錄音檔"}</Text>
+                    <Text style={styles.audioTranscript} numberOfLines={2}>
+                      {item.text}
+                    </Text>
+                  </View>
                 </View>
               )}
             </View>
@@ -215,7 +372,7 @@ export default function ChatScreen() {
             <View style={styles.rowAI}>
               <View style={[styles.aiBubble, styles.loadingBubble]}>
                 <ActivityIndicator size="small" color="#397bf2" style={{ marginRight: 8 }} />
-                <Text style={styles.aiBubbleText}>AI 防詐專家正在深度分析中...</Text>
+                <Text style={styles.aiBubbleText}>AI 防詐專家正在多模態辨識中...</Text>
               </View>
             </View>
           )}
@@ -239,13 +396,13 @@ export default function ChatScreen() {
             activeOpacity={0.75}
             disabled={isLoading}
           >
-            <Ionicons name="image-outline" size={27} color="#0d0d0d" />
+            <Ionicons name="image-outline" size={26} color="#0d0d0d" />
           </TouchableOpacity>
 
           <View style={styles.inputBox}>
             <TextInput
               style={styles.input}
-              placeholder={selectedImage ? "已附加圖片，可在此補充對話細節..." : "輸入文字、或上傳圖片..."}
+              placeholder={selectedImage ? "已附加圖片，可在此補充對話細節..." : "輸入文字、上傳圖片或語音..."}
               placeholderTextColor="#9aa4b2"
               value={message}
               onChangeText={setMessage}
@@ -258,8 +415,9 @@ export default function ChatScreen() {
             style={styles.toolButton}
             onPress={handleVoiceInput}
             activeOpacity={0.75}
+            disabled={isLoading}
           >
-            <Ionicons name="mic-outline" size={26} color="#9aa4b2" />
+            <Ionicons name="mic-outline" size={26} color="#397bf2" />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -271,10 +429,59 @@ export default function ChatScreen() {
             <Ionicons
               name="paper-plane-outline"
               size={26}
-              color={message.trim() || selectedImage ? "#397bf2" : "#0d0d0d"}
+              color={message.trim() || selectedImage ? "#397bf2" : "#94a3b8"}
             />
           </TouchableOpacity>
         </View>
+
+        {/* 🎙️ 語音通話與 AI Deepfake 檢測選擇彈窗 */}
+        <Modal visible={showVoiceModal} transparent animationType="fade">
+          <TouchableOpacity
+            style={styles.voiceOverlay}
+            activeOpacity={1}
+            onPress={() => setShowVoiceModal(false)}
+          >
+            <TouchableOpacity activeOpacity={1} style={styles.voiceCard}>
+              <View style={styles.voiceHeader}>
+                <View>
+                  <Text style={styles.voiceHeaderTitle}>實時語音與通話防詐檢測</Text>
+                  <Text style={styles.voiceHeaderSubtitle}>選擇通話錄音或可疑語音送交 AI 模型分析</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.voiceClose}
+                  onPress={() => setShowVoiceModal(false)}
+                >
+                  <Ionicons name="close" size={20} color="#8a97a8" />
+                </TouchableOpacity>
+              </View>
+
+              {SAMPLE_VOICE_SCENARIOS.map((sc) => (
+                <TouchableOpacity
+                  key={sc.id}
+                  style={styles.voiceScenarioItem}
+                  activeOpacity={0.82}
+                  onPress={() => handleAnalyzeVoiceScenario(sc)}
+                >
+                  <View style={styles.voiceIconWrap}>
+                    <Ionicons name="volume-high" size={22} color="#397bf2" />
+                  </View>
+                  <View style={styles.voiceScenarioBody}>
+                    <Text style={styles.voiceScenarioTitle}>{sc.title}</Text>
+                    <Text style={styles.voiceScenarioDesc}>{sc.desc}</Text>
+                  </View>
+                  <Ionicons name="play-circle" size={26} color="#397bf2" />
+                </TouchableOpacity>
+              ))}
+
+              <View style={styles.voiceHintBox}>
+                <Ionicons name="shield-checkmark-outline" size={16} color="#10b981" />
+                <Text style={styles.voiceHintText}>
+                  支援辨識 TTS 合成語音、情緒壓迫與聲線異常。
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -294,8 +501,8 @@ const styles = StyleSheet.create({
     borderBottomColor: "#e5e7eb",
   },
   backButton: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
-  headerTitle: { color: "#111827", fontSize: 18, fontWeight: "500" },
-  headerSpacer: { width: 48 },
+  headerTitle: { color: "#111827", fontSize: 18, fontWeight: "700" },
+  clearButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
   chatArea: { flex: 1, backgroundColor: "#f8fbff" },
   chatContent: { paddingHorizontal: 14, paddingTop: 16, paddingBottom: 18 },
   
@@ -383,4 +590,94 @@ const styles = StyleSheet.create({
     paddingVertical: Platform.OS === "ios" ? 9 : 6,
     textAlignVertical: "center",
   },
+
+  // 🎵 語音錄音泡泡
+  audioBubble: {
+    maxWidth: "82%",
+    borderRadius: 16,
+    borderBottomRightRadius: 4,
+    backgroundColor: "#2563eb",
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  audioIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  audioMeta: { flex: 1 },
+  audioTitle: { color: "#ffffff", fontSize: 13, fontWeight: "700", marginBottom: 2 },
+  audioTranscript: { color: "rgba(255, 255, 255, 0.85)", fontSize: 11, lineHeight: 15 },
+
+  // 🎙️ 語音對話彈窗
+  voiceOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  voiceCard: {
+    width: "100%",
+    borderRadius: 20,
+    backgroundColor: "#ffffff",
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  voiceHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  voiceHeaderTitle: { fontSize: 17, fontWeight: "800", color: "#111827", marginBottom: 3 },
+  voiceHeaderSubtitle: { fontSize: 12, color: "#8a97a8" },
+  voiceClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  voiceScenarioItem: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f8fbff",
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  voiceIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  voiceScenarioBody: { flex: 1 },
+  voiceScenarioTitle: { fontSize: 13, fontWeight: "700", color: "#1e293b", marginBottom: 2 },
+  voiceScenarioDesc: { fontSize: 11, color: "#64748b" },
+  voiceHintBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f0fdf4",
+    padding: 10,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  voiceHintText: { fontSize: 11, color: "#166534", marginLeft: 6, flex: 1 },
 });

@@ -63,6 +63,9 @@ const policeAntiFraudImages = [
     `https://165dashboard.tw/CIB_DWS_API/api/DownloadArea/GetDownlodAreaImage?id=${id}`
 );
 
+const API_URL =
+  process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
+
 const getRandomAntiFraudImage = (currentImage?: string) => {
   const availableImages = policeAntiFraudImages.filter((image) => image !== currentImage);
   const imagePool = availableImages.length > 0 ? availableImages : policeAntiFraudImages;
@@ -75,6 +78,11 @@ export default function HomeScreen() {
     getRandomAntiFraudImage()
   );
   const [avatarUri, setAvatarUri] = useState("");
+  const [stats, setStats] = useState({
+    totalScamRecords: 52830,
+    todayReports: 14,
+    systemStatus: "全時防護中",
+  });
 
   useEffect(() => {
     policeAntiFraudImages.forEach((image) => {
@@ -84,19 +92,41 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      let isMounted = true;
+
       const loadSavedProfile = async () => {
         const savedProfile = await getSavedProfile();
-        setAvatarUri(savedProfile.avatarUri);
+        if (isMounted) setAvatarUri(savedProfile.avatarUri);
+      };
+
+      const loadHomeStats = async () => {
+        try {
+          const res = await fetch(`${API_URL}/api/info/home/stats`);
+          const data = await res.json();
+          if (isMounted && data.success && data.data) {
+            setStats({
+              totalScamRecords: data.data.totalScamRecords || 52830,
+              todayReports: data.data.todayReports || 14,
+              systemStatus: data.data.systemStatus || "全時防護中",
+            });
+          }
+        } catch {
+          // ignore
+        }
       };
 
       void loadSavedProfile();
+      void loadHomeStats();
       setPoliceAntiFraudImage((currentImage) => getRandomAntiFraudImage(currentImage));
 
       const imageTimer = setInterval(() => {
         setPoliceAntiFraudImage((currentImage) => getRandomAntiFraudImage(currentImage));
       }, 6000);
 
-      return () => clearInterval(imageTimer);
+      return () => {
+        isMounted = false;
+        clearInterval(imageTimer);
+      };
     }, [])
   );
 
@@ -133,6 +163,17 @@ export default function HomeScreen() {
           <View style={styles.heroTextBlock}>
             <Text style={styles.heroTitle}>AI 智能防詐，守護你的每一通訊息</Text>
             <Text style={styles.heroSubtitle}>即時偵測、風險提示，遇到可疑內容先查證。</Text>
+
+            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8, gap: 6, flexWrap: "wrap" }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#10b981" }} />
+              <Text style={{ fontSize: 11, fontWeight: "800", color: "#10b981" }}>
+                {stats.systemStatus}
+              </Text>
+              <Text style={{ fontSize: 11, color: "#cbd5e1" }}>・</Text>
+              <Text style={{ fontSize: 11, color: "#64748b", fontWeight: "700" }}>
+                已收錄 {Number(stats.totalScamRecords).toLocaleString()} 筆防詐資料
+              </Text>
+            </View>
           </View>
           <View style={styles.heroIconCircle}>
             <Ionicons name="shield-checkmark" size={30} color="#2f7df6" />

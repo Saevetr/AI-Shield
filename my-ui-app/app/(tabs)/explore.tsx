@@ -16,6 +16,9 @@ import {
 // 目前先註解，避免前端直接寫資料庫被 Firestore 安全規則擋住。
 // import { syncKnowledgeArticlesToFirestore } from "@/utils/knowledgeSync";
 
+const API_BASE =
+  process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
+
 const NPA_LIST_URL = "https://www.npa.gov.tw/ch/app/news/list?id=2139&module=news";
 const NPA_BASE_URL = "https://www.npa.gov.tw";
 const ARTICLES_PER_PAGE = 5;
@@ -1147,7 +1150,31 @@ export default function KnowledgeScreen() {
         })
         .map(toLatestArticle)
         .slice(0, LATEST_ARTICLE_COUNT);
-      const parsedArticles = [...curatedKnowledgeArticles, ...latestArticles]
+      // 1. 優先從後端資料庫取得防詐知識文章
+      let dbArticles: Article[] = [];
+      try {
+        const dbRes = await fetch(`${API_BASE}/api/info/anti-fraud-knowledge`);
+        const dbJson = await dbRes.json();
+        if (dbRes.ok && dbJson.success && Array.isArray(dbJson.data)) {
+          dbArticles = dbJson.data.map((row: any) => ({
+            id: `db-knowledge-${row.knowledge_id}`,
+            category: (row.category || "詐騙手法") as Category,
+            title: row.title,
+            content: row.content,
+            summary: row.content ? row.content.slice(0, 80) + "..." : "防詐資料庫收錄文章",
+            source: row.source || "官方防詐資料庫",
+            scamType: row.category || "手法分析",
+            date: row.created_at ? new Date(row.created_at).toLocaleDateString("zh-TW") : "資料庫紀錄",
+            accent: "#397bf2",
+            icon: "shield-checkmark-outline" as any,
+            url: "https://165.npa.gov.tw/",
+          }));
+        }
+      } catch {
+        // ignore
+      }
+
+      const parsedArticles = [...dbArticles, ...curatedKnowledgeArticles, ...latestArticles]
         .filter((article) => {
           const articleKey = article.id.startsWith("curated-") ? article.id : article.url || article.id;
 
