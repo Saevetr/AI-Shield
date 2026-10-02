@@ -1,12 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Text, TextInput } from "@/components/app-text";
 import * as ImagePicker from "expo-image-picker";
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
+import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { auth } from "@/app/config/firebase";
 import { router } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Image,
   Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -49,6 +54,10 @@ export default function ProfileDetailScreen() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [customerId, setCustomerId] = useState("");
+  const [userId, setUserId] = useState<number | string>("");
+  const [isGoogleBound, setIsGoogleBound] = useState(false);
+  const [isLineBound, setIsLineBound] = useState(false);
+  const [isBinding, setIsBinding] = useState(false);
   const [originalPhone, setOriginalPhone] = useState("");
   const [originalEmail, setOriginalEmail] = useState("");
   const [birthday, setBirthday] = useState("");
@@ -89,6 +98,10 @@ export default function ProfileDetailScreen() {
         setPhone(savedProfile.phone);
         setEmail(savedProfile.email);
         setCustomerId(savedProfile.customerId || "");
+        if (savedProfile.userId) setUserId(savedProfile.userId);
+        const cid = String(savedProfile.customerId || "").toUpperCase();
+        if (cid.startsWith("GOOGLE")) setIsGoogleBound(true);
+        if (cid.startsWith("LINE")) setIsLineBound(true);
         setOriginalPhone(savedProfile.phone);
         setOriginalEmail(savedProfile.email);
         setBirthday(savedProfile.birthday);
@@ -103,6 +116,10 @@ export default function ProfileDetailScreen() {
         setPhone(dbProfile.phone);
         setEmail(dbProfile.email);
         setCustomerId(dbProfile.customerId || "");
+        if (dbProfile.userId) setUserId(dbProfile.userId);
+        const dbCid = String(dbProfile.customerId || "").toUpperCase();
+        if (dbCid.startsWith("GOOGLE")) setIsGoogleBound(true);
+        if (dbCid.startsWith("LINE")) setIsLineBound(true);
         setOriginalPhone(dbProfile.phone);
         setOriginalEmail(dbProfile.email);
         if (dbProfile.birthday) setBirthday(dbProfile.birthday);
@@ -231,10 +248,12 @@ export default function ProfileDetailScreen() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            userId,
+            customerId,
             currentEmail: originalEmail,
             name,
             phone: cleanPhone,
-            newEmail: email.trim().toLowerCase(),
+            newEmail: email === "尚未設定" ? "" : email.trim().toLowerCase(),
             verificationToken,
           }),
         });
@@ -467,6 +486,133 @@ export default function ProfileDetailScreen() {
       ]
     );
   };
+  const getCurrentFrontendUrl = () => {
+    const globalObject = globalThis as any;
+    return (
+      globalObject?.location?.origin ||
+      process.env.EXPO_PUBLIC_FRONTEND_URL ||
+      "https://maipianaishield-d61c7.web.app"
+    );
+  };
+
+  const handleBindGoogle = async () => {
+    if (isGoogleBound) return;
+    try {
+      setIsBinding(true);
+
+      if (Platform.OS === "web") {
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: "select_account" });
+        const userCredential = await signInWithPopup(auth, provider);
+        if (userCredential?.user) {
+          const idToken = await userCredential.user.getIdToken();
+          const res = await fetch(`${API_URL}/api/auth/bind-oauth`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId,
+              email: originalEmail,
+              provider: "google",
+              idToken,
+            }),
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            setIsGoogleBound(true);
+            if (data.data?.avatar_url) setAvatarUri(data.data.avatar_url);
+            Alert.alert("綁定成功", "已成功綁定 Google 帳號！");
+          } else {
+            throw new Error(data.message || "綁定失敗");
+          }
+        }
+        return;
+      }
+
+      // 📱 Expo Go / 原生 App
+      const returnUrl = Linking.createURL("/google-callback");
+      const googleAuthUrl = `${API_URL}/api/auth/google-start?frontendUrl=${encodeURIComponent(returnUrl)}`;
+      const authResult = await WebBrowser.openAuthSessionAsync(googleAuthUrl, returnUrl);
+
+      if (authResult.type === "success" && authResult.url) {
+        const parsed = Linking.parse(authResult.url);
+        const ticket = parsed.queryParams?.ticket;
+        if (ticket) {
+          const res = await fetch(`${API_URL}/api/auth/bind-oauth`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId,
+              email: originalEmail,
+              provider: "google",
+              ticket: String(ticket),
+            }),
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            setIsGoogleBound(true);
+            if (data.data?.avatar_url) setAvatarUri(data.data.avatar_url);
+            Alert.alert("綁定成功", "已成功綁定 Google 帳號！");
+          } else {
+            throw new Error(data.message || "綁定失敗");
+          }
+        }
+      }
+    } catch (err: any) {
+      Alert.alert("Google 綁定失敗", err.message || "無法完成 Google 綁定");
+    } finally {
+      setIsBinding(false);
+    }
+  };
+
+  const handleBindLine = async () => {
+    if (isLineBound) return;
+    try {
+      setIsBinding(true);
+      const returnUrl = Platform.OS === "web"
+        ? `${getCurrentFrontendUrl()}/line-callback`
+        : Linking.createURL("/line-callback");
+
+      const lineAuthUrl = `${API_URL}/api/auth/line-login?frontendUrl=${encodeURIComponent(returnUrl)}`;
+
+      if (Platform.OS === "web") {
+        window.location.href = lineAuthUrl;
+        return;
+      }
+
+      // 📱 Expo Go / 原生 App
+      const authResult = await WebBrowser.openAuthSessionAsync(lineAuthUrl, returnUrl);
+
+      if (authResult.type === "success" && authResult.url) {
+        const parsed = Linking.parse(authResult.url);
+        const ticket = parsed.queryParams?.ticket;
+        if (ticket) {
+          const res = await fetch(`${API_URL}/api/auth/bind-oauth`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId,
+              email: originalEmail,
+              provider: "line",
+              ticket: String(ticket),
+            }),
+          });
+          const data = await res.json();
+          if (res.ok && data.success) {
+            setIsLineBound(true);
+            if (data.data?.avatar_url) setAvatarUri(data.data.avatar_url);
+            Alert.alert("綁定成功", "已成功綁定 LINE 帳號！");
+          } else {
+            throw new Error(data.message || "綁定失敗");
+          }
+        }
+      }
+    } catch (err: any) {
+      Alert.alert("LINE 綁定失敗", err.message || "無法完成 LINE 綁定");
+    } finally {
+      setIsBinding(false);
+    }
+  };
+
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -904,10 +1050,19 @@ export default function ProfileDetailScreen() {
                 </View>
                 <View style={styles.bindingContent}>
                   <Text style={styles.bindingName}>Google</Text>
-                  <Text style={styles.bindingMeta}>尚未綁定</Text>
+                  <Text style={styles.bindingMeta}>
+                    {isGoogleBound ? "已綁定 Google 帳號" : "尚未綁定"}
+                  </Text>
                 </View>
-                <TouchableOpacity style={styles.bindButton} activeOpacity={0.78}>
-                  <Text style={styles.bindButtonText}>綁定</Text>
+                <TouchableOpacity
+                  style={[styles.bindButton, isGoogleBound && { backgroundColor: "#e2e8f0" }]}
+                  activeOpacity={isGoogleBound ? 1 : 0.78}
+                  disabled={isGoogleBound || isBinding}
+                  onPress={handleBindGoogle}
+                >
+                  <Text style={[styles.bindButtonText, isGoogleBound && { color: "#64748b" }]}>
+                    {isGoogleBound ? "已綁定" : isBinding ? "處理中" : "綁定"}
+                  </Text>
                 </TouchableOpacity>
               </View>
 
@@ -917,10 +1072,19 @@ export default function ProfileDetailScreen() {
                 </View>
                 <View style={styles.bindingContent}>
                   <Text style={styles.bindingName}>LINE</Text>
-                  <Text style={styles.bindingMeta}>尚未綁定</Text>
+                  <Text style={styles.bindingMeta}>
+                    {isLineBound ? "已綁定 LINE 帳號" : "尚未綁定"}
+                  </Text>
                 </View>
-                <TouchableOpacity style={styles.bindButton} activeOpacity={0.78}>
-                  <Text style={styles.bindButtonText}>綁定</Text>
+                <TouchableOpacity
+                  style={[styles.bindButton, isLineBound && { backgroundColor: "#e2e8f0" }]}
+                  activeOpacity={isLineBound ? 1 : 0.78}
+                  disabled={isLineBound || isBinding}
+                  onPress={handleBindLine}
+                >
+                  <Text style={[styles.bindButtonText, isLineBound && { color: "#64748b" }]}>
+                    {isLineBound ? "已綁定" : isBinding ? "處理中" : "綁定"}
+                  </Text>
                 </TouchableOpacity>
               </View>
 

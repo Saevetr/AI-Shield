@@ -95,6 +95,7 @@ const verifyFirebaseGoogleUser = async (idToken) => {
     displayName: String(
       firebaseUser.displayName || googleProvider.displayName || firebaseUser.email.split("@")[0]
     ).trim(),
+    photoUrl: String(firebaseUser.photoUrl || googleProvider.photoUrl || "").trim(),
   };
 };
 
@@ -341,24 +342,33 @@ router.post("/verify-code", async (req, res) => {
 // =========================================================================
 router.post("/update-profile", async (req, res) => {
   const userId = req.body.userId || req.body.user_id;
+  const customerId = req.body.customerId || req.body.customer_id;
   const currentEmail = String(req.body.currentEmail || req.body.email || "").trim().toLowerCase();
   const newName = req.body.name !== undefined ? String(req.body.name).trim() : null;
   const newPhone = req.body.phone !== undefined ? String(req.body.phone).trim() : null;
   const newEmail = req.body.newEmail !== undefined ? String(req.body.newEmail).trim().toLowerCase() : null;
   const verificationToken = String(req.body.verificationToken || "").trim();
 
-  if (!userId && !currentEmail) {
-    return res.status(400).json({ success: false, message: "缺少使用者標識" });
+  if (!userId && !customerId && !currentEmail) {
+    return res.status(400).json({ success: false, message: "缺少使用者標識 (userId / customerId / email)" });
   }
 
   try {
-    // 尋找目標使用者
-    const [users] = await db.query(
-      userId
-        ? "SELECT user_id, username, email, phone FROM [user] WHERE user_id = ? LIMIT 1"
-        : "SELECT user_id, username, email, phone FROM [user] WHERE email = ? LIMIT 1",
-      [userId || currentEmail]
-    );
+    // 尋找目標使用者（支援以 userId、customerId 或 email 查詢）
+    let userQuery = "";
+    let userParam = null;
+    if (userId) {
+      userQuery = "SELECT user_id, username, email, phone, customer_id FROM [user] WHERE user_id = ? LIMIT 1";
+      userParam = userId;
+    } else if (customerId) {
+      userQuery = "SELECT user_id, username, email, phone, customer_id FROM [user] WHERE customer_id = ? LIMIT 1";
+      userParam = customerId;
+    } else {
+      userQuery = "SELECT user_id, username, email, phone, customer_id FROM [user] WHERE email = ? LIMIT 1";
+      userParam = currentEmail;
+    }
+
+    const [users] = await db.query(userQuery, [userParam]);
 
     if (!users || users.length === 0) {
       return res.status(404).json({ success: false, message: "找不到該使用者" });
@@ -524,6 +534,65 @@ router.post("/delete-account", async (req, res) => {
     return res.status(500).json({ success: false, message: "刪除帳號失敗", error: err.message });
   }
 });
+// =========================================================================
+// 🚀 8. 綁定第三方帳號 (Bind OAuth - Google / LINE)
+// =========================================================================
+router.post("/bind-oauth", async (req, res) => {
+  const userId = req.body.userId || req.body.user_id;
+  const email = req.body.email ? String(req.body.email).trim().toLowerCase() : "";
+  const provider = String(req.body.provider || "").trim().toLowerCase(); // "google" | "line"
+  const ticket = req.body.ticket ? String(req.body.ticket).trim() : "";
+  const idToken = req.body.idToken ? String(req.body.idToken).trim() : "";
+
+  if ((!userId && !email) || !provider || (provider !== "google" && provider !== "line")) {
+    return res.status(400).json({ success: false, message: "無效的綁定參數" });
+  }
+
+  try {
+    const [users] = await db.query(
+      userId
+        ? "SELECT user_id, username, email, phone, customer_id FROM [user] WHERE user_id = ? LIMIT 1"
+        : "SELECT user_id, username, email, phone, customer_id FROM [user] WHERE email = ? LIMIT 1",
+      [userId || email]
+    );
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({ success: false, message: "找不到該使用者" });
+    }
+
+    const user = users[0];
+    let boundAvatarUrl = "";
+
+    if (provider === "google") {
+      if (ticket) {
+        const ticketData = readLineLoginTicket(ticket);
+        boundAvatarUrl = ticketData.avatarUrl || "";
+      } else if (idToken) {
+        const googleUser = await verifyFirebaseGoogleUser(idToken);
+        boundAvatarUrl = googleUser.photoUrl || "";
+      }
+    } else if (provider === "line") {
+      if (ticket) {
+        const ticketData = readLineLoginTicket(ticket);
+        boundAvatarUrl = ticketData.avatarUrl || "";
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `${provider === "google" ? "Google" : "LINE"} 帳號綁定成功！`,
+      data: {
+        provider,
+        bound: true,
+        avatar_url: boundAvatarUrl,
+      },
+    });
+  } catch (err) {
+    console.error("Bind OAuth error:", err);
+    return res.status(500).json({ success: false, message: "綁定失敗", error: err.message });
+  }
+});
+
 
 
 // =========================================================================
@@ -597,7 +666,7 @@ router.post("/google-login", async (req, res) => {
       return res.json({
         success: true,
         message: "Google 登入成功",
-        data: { ...user, username, status: "ACTIVE" },
+        data: { ...user, username, avatar_url: googleUser.photoUrl || "", status: "ACTIVE" },
       });
     }
 
@@ -616,7 +685,7 @@ router.post("/google-login", async (req, res) => {
     return res.status(201).json({
       success: true,
       message: "Google 註冊並登入成功",
-      data: createdUsers[0],
+      data: { ...createdUsers[0], avatar_url: googleUser.photoUrl || "" },
     });
   } catch (error) {
     console.error("Google login error:", error);
@@ -818,11 +887,12 @@ const sendFrontendRedirect = (res, frontendUrl, status, message, extraParams = {
   return res.redirect(target.toString());
 };
 
-const createLineLoginTicket = (user) => {
+const createLineLoginTicket = (user, avatarUrl = "") => {
   const secret = process.env.LINE_CHANNEL_SECRET;
   const payload = Buffer.from(
     JSON.stringify({
       userId: user.user_id,
+      avatarUrl: avatarUrl || "",
       issuedAt: Date.now(),
       nonce: crypto.randomBytes(16).toString("hex"),
     })
@@ -910,7 +980,14 @@ router.post("/line-login/complete", async (req, res) => {
       return res.status(401).json({ success: false, message: "找不到 LINE 登入使用者" });
     }
 
-    return res.json({ success: true, message: "LINE 登入成功", data: users[0] });
+    return res.json({
+      success: true,
+      message: "LINE 登入成功",
+      data: {
+        ...users[0],
+        avatar_url: ticketData.avatarUrl || "",
+      },
+    });
   } catch (error) {
     console.error("LINE login completion error:", error);
     return res.status(500).json({ success: false, message: "LINE 登入驗證失敗" });
@@ -970,6 +1047,7 @@ const handleLineCallback = async (req, res) => {
 
     const lineUserId = String(profile.userId);
     const displayName = String(profile.displayName || "LINE User").trim();
+    const avatarUrl = String(profile.pictureUrl || "").trim();
     const lineEmail = `line_${lineUserId}@line.local`;
     const username = `${displayName}_${lineUserId.slice(-6)}`;
 
@@ -1009,7 +1087,7 @@ const handleLineCallback = async (req, res) => {
       throw new Error("LINE user synchronization failed");
     }
 
-    const ticket = createLineLoginTicket(lineUsers[0]);
+    const ticket = createLineLoginTicket(lineUsers[0], avatarUrl);
 
     return sendFrontendRedirect(res, frontendUrl, "success", "LINE login successful", { ticket });
   } catch (error) {
@@ -1117,6 +1195,7 @@ const handleGoogleCallback = async (req, res) => {
 
     const email = String(profile.email).trim().toLowerCase();
     const displayName = String(profile.name || email.split("@")[0]).trim();
+    const avatarUrl = String(profile.picture || "").trim();
     const googleId = String(profile.sub || "");
     const username = `${displayName}_${googleId.slice(-6)}`;
 
@@ -1144,7 +1223,7 @@ const handleGoogleCallback = async (req, res) => {
       [email]
     );
 
-    const ticket = createLineLoginTicket(googleUsers[0]);
+    const ticket = createLineLoginTicket(googleUsers[0], avatarUrl);
 
     return sendFrontendRedirect(res, frontendUrl, "success", "Google login successful", { ticket });
   } catch (error) {

@@ -23,6 +23,7 @@ import {
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/app/config/firebase";
 import { setLogin } from "@/utils/auth";
+import { saveProfileAvatar } from "@/utils/profile";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -77,6 +78,12 @@ export default function Login() {
 
     await setLogin(true, data.data);
 
+    // 🔒 自動填入 Google 真實頭像
+    const googleAvatar = data.data?.avatar_url || firebaseUser.photoURL || "";
+    if (googleAvatar) {
+      await saveProfileAvatar(googleAvatar);
+    }
+
     const globalObject = globalThis as any;
 
     if (globalObject.localStorage) {
@@ -124,6 +131,12 @@ export default function Login() {
           }
 
           await setLogin(true, data.data);
+
+          // 🔒 自動填入 Google 真實頭像
+          if (data.data?.avatar_url) {
+            await saveProfileAvatar(data.data.avatar_url);
+          }
+
           const globalObject = globalThis as any;
           if (globalObject.localStorage) {
             globalObject.localStorage.setItem("isLogin", "true");
@@ -180,6 +193,12 @@ export default function Login() {
           }
 
           await setLogin(true, data.data);
+
+          // 🔒 自動填入 LINE 真實頭像
+          if (data.data?.avatar_url) {
+            await saveProfileAvatar(data.data.avatar_url);
+          }
+
           const globalObject = globalThis as any;
           if (globalObject.localStorage) {
             globalObject.localStorage.setItem("isLogin", "true");
