@@ -1,17 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Text, TextInput } from "@/components/app-text";
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Keyboard,
-  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { getCurrentUser } from "@/utils/auth";
@@ -114,7 +112,6 @@ function ScoringRulesCard() {
 }
 
 export default function RiskQueryScreen() {
-  const { width } = useWindowDimensions();
   const params = useLocalSearchParams<{ type?: string }>();
   const initialMode: QueryMode = params.type === "line" ? "line" : "phone";
   const [mode, setMode] = useState<QueryMode>(initialMode);
@@ -123,24 +120,11 @@ export default function RiskQueryScreen() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [records, setRecords] = useState<QueryResult[]>([]);
-  const scrollRef = useRef<ScrollView>(null);
-
-  useEffect(() => {
-    if (params.type === "line") {
-      setTimeout(() => {
-        scrollRef.current?.scrollTo({ x: width, animated: false });
-      }, 50);
-    }
-  }, [params.type, width]);
 
   const changeMode = (nextMode: QueryMode) => {
     Keyboard.dismiss();
     setMode(nextMode);
     setResult(null);
-    scrollRef.current?.scrollTo({
-      x: nextMode === "phone" ? 0 : width,
-      animated: true,
-    });
   };
 
   const runQuery = async (targetMode: QueryMode = mode) => {
@@ -335,10 +319,11 @@ export default function RiskQueryScreen() {
     return (
       <ScrollView
         key={targetMode}
-        style={{ width }}
+        style={styles.flex}
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
+        nestedScrollEnabled
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.queryPanel}>
@@ -535,7 +520,7 @@ export default function RiskQueryScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <Pressable style={styles.flex} onPress={Keyboard.dismiss}>
+      <View style={styles.flex}>
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -594,25 +579,8 @@ export default function RiskQueryScreen() {
           </View>
         </View>
 
-        {/* 橫向滑動主容器 */}
-        <ScrollView
-          ref={scrollRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onMomentumScrollEnd={(e) => {
-            const pageIndex = Math.round(e.nativeEvent.contentOffset.x / width);
-            const targetMode: QueryMode = pageIndex === 0 ? "phone" : "line";
-            if (mode !== targetMode) {
-              setMode(targetMode);
-              setResult(null);
-            }
-          }}
-        >
-          {renderQueryContent("phone")}
-          {renderQueryContent("line")}
-        </ScrollView>
-      </Pressable>
+        {renderQueryContent(mode)}
+      </View>
     </SafeAreaView>
   );
 }
@@ -620,7 +588,7 @@ export default function RiskQueryScreen() {
 const localStyles = StyleSheet.create({
   segmentContainer: {
     paddingHorizontal: 20,
-    paddingBottom: 10,
+    paddingBottom: 6,
   },
   rulesCard: {
     backgroundColor: "#ffffff",

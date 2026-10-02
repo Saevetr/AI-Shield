@@ -246,7 +246,7 @@ export default function HomeScreen() {
           activeOpacity={0.82}
         >
           <View style={styles.knowledgeIconCircle}>
-            <Ionicons name="book-outline" size={26} color="#397bf2" />
+            <Ionicons name="book-outline" size={26} color="#2f8064" />
           </View>
           <View style={styles.knowledgeBody}>
             <Text style={styles.knowledgeTitle}>防詐情報站</Text>
@@ -254,7 +254,7 @@ export default function HomeScreen() {
               認識最新消息、詐騙手法、防範技巧與法規
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={23} color="#7d91ad" />
+          <Ionicons name="chevron-forward" size={23} color="#6f8f82" />
         </TouchableOpacity>
 
         <View style={styles.advocacySection}>
@@ -276,6 +276,15 @@ export default function HomeScreen() {
               resizeMode="contain"
             />
           </View>
+        </View>
+
+        <View style={styles.brandFooter}>
+          <View style={styles.brandFooterLine} />
+          <View style={styles.brandFooterMark}>
+            <Ionicons name="shield-checkmark-outline" size={14} color="#6f86a5" />
+          </View>
+          <Text style={styles.brandFooterText}>@maipian.aishield</Text>
+          <View style={styles.brandFooterLine} />
         </View>
       </ScrollView>
     </SafeAreaView>

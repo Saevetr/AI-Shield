@@ -1065,7 +1065,7 @@ export const homeStyles = StyleSheet.create({
   content: {
     paddingHorizontal: 14,
     paddingTop: 8,
-    paddingBottom: 88,
+    paddingBottom: 12,
   },
   header: {
     height: 66,
@@ -1109,6 +1109,7 @@ export const homeStyles = StyleSheet.create({
     backgroundColor: "#e4efff",
     paddingHorizontal: 14,
     paddingVertical: 14,
+    marginTop: 8,
     marginBottom: 15,
     flexDirection: "row",
     alignItems: "center",
@@ -1278,14 +1279,14 @@ export const homeStyles = StyleSheet.create({
   knowledgeCard: {
     minHeight: 82,
     borderRadius: 16,
-    backgroundColor: "#eef5ff",
+    backgroundColor: "#eef8f4",
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: "#dbe9fb",
+    borderColor: "#d5e9df",
   },
   knowledgeIconCircle: {
     width: 50,
@@ -1301,13 +1302,13 @@ export const homeStyles = StyleSheet.create({
     paddingRight: 8,
   },
   knowledgeTitle: {
-    color: "#1c4f99",
+    color: "#28664f",
     fontSize: 14,
     fontWeight: "900",
     marginBottom: 4,
   },
   knowledgeText: {
-    color: "#687d99",
+    color: "#637a71",
     fontSize: 11,
     lineHeight: 17,
   },
@@ -1362,6 +1363,33 @@ export const homeStyles = StyleSheet.create({
   advocacyImage: {
     width: "100%",
     height: "100%",
+  },
+  brandFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 0,
+    paddingHorizontal: 18,
+  },
+  brandFooterLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#dbe4ef",
+  },
+  brandFooterMark: {
+    width: 25,
+    height: 25,
+    borderRadius: 13,
+    backgroundColor: "#edf3fa",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  brandFooterText: {
+    color: "#73839a",
+    fontSize: 11,
+    fontWeight: "700",
   },
 });
 export const profileStyles = StyleSheet.create({

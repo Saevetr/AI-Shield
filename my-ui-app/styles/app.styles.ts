@@ -2286,7 +2286,7 @@ export const riskQueryStyles = StyleSheet.create({
   headerText: { flex: 1, alignItems: "center", justifyContent: "center" },
   headerTitle: { color: "#172033", fontSize: 20, fontWeight: "900" },
   headerSpacer: { width: 48 },
-  content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 40 },
+  content: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 40 },
   segmentedControl: {
     height: 58,
     borderRadius: 18,
@@ -2294,7 +2294,7 @@ export const riskQueryStyles = StyleSheet.create({
     padding: 5,
     flexDirection: "row",
     gap: 6,
-    marginBottom: 16,
+    marginBottom: 0,
   },
   segment: {
     flex: 1,
