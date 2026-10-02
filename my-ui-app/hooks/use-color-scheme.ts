@@ -1,2 +1,2 @@
-export { useColorScheme } from 'react-native';
+export { useColorapp } from 'react-native';
 

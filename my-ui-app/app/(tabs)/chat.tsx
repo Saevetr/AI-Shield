@@ -21,6 +21,8 @@ import {
 // 動態安全載入語音辨識模組（若在 Expo Go 缺少原生連線時不導致閃退）
 let NativeSpeechModule: any = null;
 try {
+  // Expo Go may not include this native module, so it is loaded defensively.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const speechModule = require("expo-speech-recognition");
   if (speechModule && speechModule.ExpoSpeechRecognitionModule) {
     NativeSpeechModule = speechModule.ExpoSpeechRecognitionModule;
@@ -78,8 +80,10 @@ export default function ChatScreen() {
   const [liveTranscript, setLiveTranscript] = useState("");
   const [showFallbackModal, setShowFallbackModal] = useState(false);
 
-  const recordingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const recordingStartRef = useRef<number>(0);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const transcriptRef = useRef("");
+  const recognitionActiveRef = useRef(false);
+  const stopRequestedRef = useRef(false);
   const webRecRef = useRef<any>(null);
 
   // 1. 本地載入歷史對話紀錄，避免跳轉後遺失
@@ -130,20 +134,42 @@ export default function ChatScreen() {
       });
 
       subResult = NativeSpeechModule.addListener("result", (event: any) => {
-        const recognized = event.results?.[0]?.transcript;
+        const recognized = event.results
+          ?.map((result: { transcript?: string }) => result.transcript || "")
+          .filter(Boolean)
+          .join(" ")
+          .trim();
         if (recognized) {
+          transcriptRef.current = recognized;
           setLiveTranscript(recognized);
           setMessage(recognized);
         }
       });
 
       subEnd = NativeSpeechModule.addListener("end", () => {
+        recognitionActiveRef.current = false;
         setIsRecording(false);
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
       });
 
       subError = NativeSpeechModule.addListener("error", (event: any) => {
         console.warn("Speech recognition error:", event);
+        recognitionActiveRef.current = false;
         setIsRecording(false);
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
+
+        if (!stopRequestedRef.current) {
+          Alert.alert(
+            "語音辨識無法使用",
+            event?.message || "請確認網路、麥克風權限與裝置的語音辨識服務後再試一次。"
+          );
+        }
       });
     } catch (e) {
       console.warn("Failed to attach native speech listener:", e);
@@ -154,6 +180,15 @@ export default function ChatScreen() {
       subResult?.remove?.();
       subEnd?.remove?.();
       subError?.remove?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      try {
+        NativeSpeechModule?.abort?.();
+      } catch {}
     };
   }, []);
 
@@ -196,12 +231,23 @@ export default function ChatScreen() {
   };
 
   // 🎙️ 啟動「即時語音轉文字」辨識
+  const resetRecognitionState = () => {
+    recognitionActiveRef.current = false;
+    setIsRecording(false);
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+  };
+
   const startVoiceRecognition = async () => {
-    if (isLoading) return;
+    if (isLoading || recognitionActiveRef.current) return;
+    recognitionActiveRef.current = true;
+    stopRequestedRef.current = false;
+    transcriptRef.current = "";
     setLiveTranscript("");
     setIsRecording(true);
     setRecordingSeconds(0);
-    recordingStartRef.current = Date.now();
 
     if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     recordingTimerRef.current = setInterval(() => {
@@ -214,7 +260,7 @@ export default function ChatScreen() {
         const perm = await NativeSpeechModule.requestPermissionsAsync();
         if (!perm?.granted) {
           Alert.alert("需要權限", "請允許語音辨識與麥克風權限以進行即時轉文字。");
-          stopVoiceRecognition();
+          resetRecognitionState();
           return;
         }
         NativeSpeechModule.start({
@@ -245,6 +291,7 @@ export default function ChatScreen() {
             for (let i = 0; i < event.results.length; i++) {
               recognized += event.results[i][0].transcript;
             }
+            transcriptRef.current = recognized.trim();
             setLiveTranscript(recognized);
             setMessage(recognized);
           };
@@ -252,7 +299,7 @@ export default function ChatScreen() {
             console.warn("Web speech error:", e);
           };
           rec.onend = () => {
-            setIsRecording(false);
+            resetRecognitionState();
           };
           rec.start();
           webRecRef.current = rec;
@@ -264,21 +311,26 @@ export default function ChatScreen() {
     }
 
     // 3. 環境尚未掛載原生語音引擎（如純 Expo Go 環境）時的智慧對話框
+    resetRecognitionState();
     setShowFallbackModal(true);
   };
 
   // 🎙️ 停止語音轉文字辨識，並將文字直接送交 AI 分析
   const stopVoiceRecognition = async () => {
+    if (!recognitionActiveRef.current || stopRequestedRef.current) return;
+    stopRequestedRef.current = true;
+
     if (recordingTimerRef.current) {
       clearInterval(recordingTimerRef.current);
       recordingTimerRef.current = null;
     }
-    setIsRecording(false);
 
     if (NativeSpeechModule) {
       try {
         NativeSpeechModule.stop();
-      } catch {}
+      } catch {
+        resetRecognitionState();
+      }
     }
 
     if (webRecRef.current) {
@@ -289,10 +341,16 @@ export default function ChatScreen() {
     }
 
     // 檢查是否有即時辨識到的語音文字
-    const textToSend = liveTranscript.trim() || message.trim();
-    if (textToSend) {
-      sendTranscribedText(textToSend);
-    }
+    // Some Android recognizers emit their final result just after stop().
+    setTimeout(() => {
+      const textToSend = transcriptRef.current.trim();
+      stopRequestedRef.current = false;
+      if (textToSend) {
+        sendTranscribedText(textToSend);
+      } else {
+        Alert.alert("沒有辨識到語音", "請靠近麥克風再說一次，或確認裝置已啟用語音辨識服務。");
+      }
+    }, 350);
   };
 
   // 🚀 發送即時語音轉出的文字送交後端 scam-ai-core 進行深度防詐分析
@@ -560,8 +618,13 @@ export default function ChatScreen() {
           {/* 🎙️ 即時語音轉文字按鈕（按住或點擊說話） */}
           <TouchableOpacity
             style={[styles.toolButton, isRecording && styles.toolButtonRecording]}
-            onPressIn={startVoiceRecognition}
-            onPressOut={stopVoiceRecognition}
+            onPress={() => {
+              if (recognitionActiveRef.current) {
+                void stopVoiceRecognition();
+              } else {
+                void startVoiceRecognition();
+              }
+            }}
             activeOpacity={0.6}
             disabled={isLoading}
           >
@@ -598,7 +661,7 @@ export default function ChatScreen() {
             {liveTranscript ? (
               <View style={styles.liveTranscriptBox}>
                 <Text style={styles.liveTranscriptText} numberOfLines={3}>
-                  "{liveTranscript}"
+                  {liveTranscript}
                 </Text>
               </View>
             ) : (
@@ -630,33 +693,17 @@ export default function ChatScreen() {
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.fallbackSubtitle}>
-                  可直接點擊下方輸入框並利用手機鍵盤上的「麥克風按鍵」進行即時語音聽寫，或快速選擇通話範例進行防詐分析：
+                  可直接點擊下方輸入框並利用手機鍵盤上的「麥克風按鍵」進行即時語音聽寫：
                 </Text>
 
                 <TextInput
                   style={styles.fallbackInput}
-                  placeholder="點此使用手機鍵盤語音輸入或貼上可疑對話..."
+                  placeholder="點此使用手機鍵盤語音輸入..."
                   placeholderTextColor="#94a3b8"
                   value={message}
                   onChangeText={setMessage}
                   multiline
                 />
-
-                <Text style={styles.scenarioLabel}>常用可疑通話語音情境：</Text>
-                {VOICE_PRESETS.map((p) => (
-                  <TouchableOpacity
-                    key={p.title}
-                    style={styles.presetButton}
-                    onPress={() => {
-                      setMessage(p.text);
-                      setShowFallbackModal(false);
-                      sendTranscribedText(p.text);
-                    }}
-                  >
-                    <Ionicons name="volume-medium-outline" size={18} color="#397bf2" />
-                    <Text style={styles.presetTitle}>{p.title}</Text>
-                  </TouchableOpacity>
-                ))}
 
                 <TouchableOpacity
                   style={styles.fallbackSendButton}
@@ -921,26 +968,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#0f172a",
     marginBottom: 12,
-  },
-  scenarioLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#475569",
-    marginBottom: 6,
-  },
-  presetButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f0f7ff",
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 8,
-  },
-  presetTitle: {
-    fontSize: 13,
-    color: "#1e40af",
-    marginLeft: 8,
-    flex: 1,
   },
   fallbackSendButton: {
     marginTop: 6,

@@ -292,6 +292,7 @@ export default function ProfileDetailScreen() {
         avatarUri,
         birthday,
         email,
+        displayEmail: isThirdPartyAccount(customerId, email) ? "尚未設定" : (email || "尚未設定"),
         gender,
         name,
         phone,
