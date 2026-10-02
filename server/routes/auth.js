@@ -185,10 +185,21 @@ router.get("/profile", async (req, res) => {
       return res.status(404).json({ success: false, message: "找不到該使用者的資料庫紀錄" });
     }
 
+    const userRow = rows[0];
+    const isThirdParty =
+      String(userRow.customer_id || "").toUpperCase().startsWith("LINE") ||
+      String(userRow.customer_id || "").toUpperCase().startsWith("GOOGLE") ||
+      String(userRow.email || "").toLowerCase().endsWith("@line.local");
+
     return res.json({
       success: true,
       message: "成功取得使用者個人資料",
-      data: rows[0],
+      data: {
+        ...userRow,
+        db_email: userRow.email, // 🔒 保證攜帶資料庫真實 Email
+        display_email: isThirdParty ? "尚未設定" : userRow.email,
+        is_third_party: isThirdParty,
+      },
     });
   } catch (error) {
     console.error("❌ Get profile error:", error);
@@ -376,9 +387,9 @@ router.post("/update-profile", async (req, res) => {
 
     const user = users[0];
 
-    // 🛡️ 核心安全防護：若變更了電話或 Email，必須檢核 verificationToken
-    const isChangingPhone = newPhone && newPhone !== user.phone;
-    const isChangingEmail = newEmail && newEmail !== user.email;
+    // 🛡️ 核心安全防護：判斷是否真正變更了電話或 Email（排除「尚未設定」與空字串）
+    const isChangingPhone = newPhone && newPhone !== user.phone && newPhone !== "尚未設定";
+    const isChangingEmail = newEmail && newEmail !== user.email && newEmail !== "尚未設定" && newEmail !== "";
 
     if (isChangingPhone || isChangingEmail) {
       if (!verificationToken) {
@@ -416,11 +427,11 @@ router.post("/update-profile", async (req, res) => {
       updateFields.push("username = ?");
       updateParams.push(newName);
     }
-    if (newPhone) {
+    if (isChangingPhone) {
       updateFields.push("phone = ?");
       updateParams.push(newPhone);
     }
-    if (newEmail) {
+    if (isChangingEmail) {
       updateFields.push("email = ?");
       updateParams.push(newEmail);
       updateFields.push("is_verified = 1"); // 經過 Token 核對，確認已驗證
@@ -437,14 +448,25 @@ router.post("/update-profile", async (req, res) => {
     );
 
     const [updatedUsers] = await db.query(
-      "SELECT user_id, username, email, phone, membership_level, status FROM [user] WHERE user_id = ? LIMIT 1",
+      "SELECT user_id, username, email, phone, membership_level, status, customer_id FROM [user] WHERE user_id = ? LIMIT 1",
       [user.user_id]
     );
+
+    const updatedUser = updatedUsers[0];
+    const isThirdParty =
+      String(updatedUser.customer_id || "").toUpperCase().startsWith("LINE") ||
+      String(updatedUser.customer_id || "").toUpperCase().startsWith("GOOGLE") ||
+      String(updatedUser.email || "").toLowerCase().endsWith("@line.local");
 
     return res.json({
       success: true,
       message: "個人資料已安全更新完成",
-      data: updatedUsers[0],
+      data: {
+        ...updatedUser,
+        db_email: updatedUser.email, // 🔒 回傳時必定攜帶 DB 的真實 Email
+        display_email: isThirdParty ? "尚未設定" : updatedUser.email,
+        is_third_party: isThirdParty,
+      },
     });
   } catch (error) {
     console.error("❌ Update profile error:", error);

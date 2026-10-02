@@ -8,6 +8,7 @@ export type SavedProfile = {
   avatarUri: string;
   birthday: string;
   email: string;
+  displayEmail: string;
   gender: string;
   name: string;
   phone: string;
@@ -20,6 +21,7 @@ export const DEFAULT_PROFILE: SavedProfile = {
   avatarUri: "",
   birthday: "",
   email: "",
+  displayEmail: "尚未設定",
   gender: "",
   name: "使用者",
   phone: "",
@@ -30,7 +32,7 @@ export const isThirdPartyUser = (user: any): boolean => {
   if (!user) return false;
   const cid = String(user.customerId || user.customer_id || "").toUpperCase();
   const pass = String(user.password_hash || "").toUpperCase();
-  const email = String(user.email || "").toLowerCase();
+  const email = String(user.email || user.db_email || "").toLowerCase();
 
   return (
     cid.startsWith("GOOGLE") ||
@@ -50,7 +52,7 @@ export const syncProfileWithBackend = async (): Promise<SavedProfile> => {
 
   try {
     const currentUser = await getCurrentUser();
-    const identifier = currentUser?.user_id || currentUser?.userId || currentUser?.email;
+    const identifier = currentUser?.user_id || currentUser?.userId || currentUser?.email || currentUser?.db_email;
 
     if (!identifier) {
       return await getSavedProfile();
@@ -66,20 +68,21 @@ export const syncProfileWithBackend = async (): Promise<SavedProfile> => {
       const dbUser = result.data;
       const currentSaved = await getSavedProfile();
       const isThirdParty = isThirdPartyUser(dbUser) || isThirdPartyUser(currentUser);
+      const realDbEmail = dbUser.db_email || dbUser.email || currentSaved.email || "";
 
       const syncedProfile: SavedProfile = {
         ...currentSaved,
         userId: dbUser.user_id,
         name: dbUser.username || currentSaved.name || "使用者",
-        // 🔒 偵測到是 Google 或 LINE 登入時，Gmail 設定為空白
-        email: isThirdParty ? "" : (dbUser.email || currentSaved.email),
+        email: realDbEmail, // 🔒 永遠攜帶真實資料庫 Email
+        displayEmail: isThirdParty ? "尚未設定" : (realDbEmail || "尚未設定"),
         phone: dbUser.phone || currentSaved.phone,
         membershipLevel: dbUser.membership_level || "FREE",
         customerId: dbUser.customer_id,
       };
 
       await saveProfile(syncedProfile);
-      await setCurrentUser({ ...currentUser, ...dbUser });
+      await setCurrentUser({ ...currentUser, ...dbUser, email: realDbEmail });
 
       return syncedProfile;
     }
@@ -95,12 +98,13 @@ export const getSavedProfile = async (): Promise<SavedProfile> => {
   const legacyAvatarUri = (await AsyncStorage.getItem(PROFILE_AVATAR_URI_KEY)) ?? "";
   const currentUser = await getCurrentUser();
   const isThirdParty = isThirdPartyUser(currentUser);
+  const realDbEmail = currentUser?.db_email || currentUser?.email || DEFAULT_PROFILE.email;
 
   const baseProfile: SavedProfile = {
     ...DEFAULT_PROFILE,
     name: currentUser?.username || currentUser?.displayName || currentUser?.name || DEFAULT_PROFILE.name,
-    // 🔒 偵測到是 Google 或 LINE 登入時，Gmail 設定為空白
-    email: isThirdParty ? "" : (currentUser?.email || DEFAULT_PROFILE.email),
+    email: realDbEmail, // 🔒 攜帶真實資料庫 Email
+    displayEmail: isThirdParty ? "尚未設定" : (realDbEmail || "尚未設定"),
     phone: currentUser?.phone || DEFAULT_PROFILE.phone,
     membershipLevel: currentUser?.membership_level || DEFAULT_PROFILE.membershipLevel,
     userId: currentUser?.user_id || currentUser?.userId,
@@ -117,6 +121,7 @@ export const getSavedProfile = async (): Promise<SavedProfile> => {
   try {
     const savedProfile = JSON.parse(savedProfileJson) as Partial<SavedProfile>;
     const savedIsThirdParty = isThirdParty || isThirdPartyUser(savedProfile);
+    const resolvedDbEmail = savedProfile.email || baseProfile.email;
 
     return {
       ...baseProfile,
@@ -124,12 +129,8 @@ export const getSavedProfile = async (): Promise<SavedProfile> => {
       name: savedProfile.name && savedProfile.name !== "麥片AI Shield" && savedProfile.name !== "使用者"
         ? savedProfile.name
         : baseProfile.name,
-      // 🔒 偵測到是 Google 或 LINE 登入時，Gmail 設定為空白
-      email: savedIsThirdParty
-        ? ""
-        : (savedProfile.email && savedProfile.email !== "maipian.aishield@gmail.com"
-            ? savedProfile.email
-            : baseProfile.email),
+      email: resolvedDbEmail, // 🔒 永遠攜帶真實資料庫 Email
+      displayEmail: savedIsThirdParty ? "尚未設定" : (resolvedDbEmail || "尚未設定"),
       phone: savedProfile.phone && savedProfile.phone !== "0912 345 678"
         ? savedProfile.phone
         : baseProfile.phone,

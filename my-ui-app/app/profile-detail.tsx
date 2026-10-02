@@ -229,8 +229,12 @@ export default function ProfileDetailScreen() {
     try {
       const cleanPhone = phone.replace(/\s/g, "");
       const cleanOriginalPhone = originalPhone.replace(/\s/g, "");
-      const isPhoneChanged = cleanPhone !== cleanOriginalPhone;
-      const isEmailChanged = email.trim().toLowerCase() !== originalEmail.trim().toLowerCase();
+      const isPhoneChanged = cleanPhone !== cleanOriginalPhone && cleanPhone !== "" && cleanPhone !== "尚未設定";
+      // 只有在使用者真正主動修改了 Email（非「尚未設定」且與原始不同）時才算 isEmailChanged
+      const isEmailChanged =
+        email !== "尚未設定" &&
+        email.trim() !== "" &&
+        email.trim().toLowerCase() !== originalEmail.trim().toLowerCase();
 
       // 🛡️ 若變更了電話或 Email，必須有經後端簽發的驗證 Token
       if ((isPhoneChanged || isEmailChanged) && !verificationToken) {
@@ -244,18 +248,27 @@ export default function ProfileDetailScreen() {
 
       // 1. 同步請求後端寫入資料庫
       try {
+        const updatePayload: any = {
+          userId,
+          customerId,
+          currentEmail: originalEmail,
+          name,
+        };
+
+        if (isPhoneChanged) {
+          updatePayload.phone = cleanPhone;
+        }
+        if (isEmailChanged) {
+          updatePayload.newEmail = email.trim().toLowerCase();
+        }
+        if (verificationToken) {
+          updatePayload.verificationToken = verificationToken;
+        }
+
         const updateRes = await fetch(`${API_URL}/api/auth/update-profile`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId,
-            customerId,
-            currentEmail: originalEmail,
-            name,
-            phone: cleanPhone,
-            newEmail: email === "尚未設定" ? "" : email.trim().toLowerCase(),
-            verificationToken,
-          }),
+          body: JSON.stringify(updatePayload),
         });
 
         const updateData = await updateRes.json();
