@@ -3,13 +3,12 @@ import { Text, TextInput } from "@/components/app-text";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -34,32 +33,8 @@ const WELCOME_MESSAGE: ChatMessage = {
   id: "welcome",
   sender: "ai",
   type: "text",
-  text: "你好！我是 AI 防詐多模態專家。你可以傳送可疑文字、聊天截圖或點擊麥克風進行通話錄音分析，我會為你即時辨識潛在詐騙與合成語音（Deepfake）特徵。",
+  text: "你好！我是 AI 防詐多模態專家。你可以傳送可疑文字、聊天截圖或按住麥克風進行通話語音錄音，我會為你即時辨識潛在詐騙與合成語音（Deepfake）特徵。",
 };
-
-const SAMPLE_VOICE_SCENARIOS = [
-  {
-    id: "v1",
-    title: "假檢警：要求至 ATM 操作安全帳戶",
-    desc: "典型公務機關涉案恐嚇話術，語氣急迫催促、禁止掛電話",
-    transcript: "我是台北地檢署陳檢察官，你的帳戶涉及重大洗錢案已被凍結，請立刻至最近的 ATM 配合操作進行資金監管，不可告訴任何人！",
-    filename: "scam_voice_prosecutor.m4a",
-  },
-  {
-    id: "v2",
-    title: "解除分期付款：購物網站訂單重複扣款",
-    desc: "假冒電商客服與銀行專員，誘導開啟網銀或無卡存款",
-    transcript: "您好，這裡是博客來客服，因系統失誤將您的訂單設為 12 期重複扣款，稍後銀行專員會致電協助您至網銀解除設定。",
-    filename: "scam_voice_ecommerce.m4a",
-  },
-  {
-    id: "v3",
-    title: "AI 聲音複製 (Deepfake)：親友求急借錢",
-    desc: "高度擬真聲線假冒子女或熟人，謊稱出車禍或急需周轉",
-    transcript: "爸，是我！我跟朋友出車禍了，對方要我馬上賠五萬塊私下和解不然要報警，我把帳號傳給你，趕快匯過來救我！",
-    filename: "scam_voice_deepfake.m4a",
-  },
-] as const;
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
@@ -70,7 +45,11 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [showVoiceModal, setShowVoiceModal] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const recordingStartRef = useRef<number>(0);
 
   // 1. 本地載入歷史對話紀錄，避免跳轉後遺失
   useEffect(() => {
@@ -142,43 +121,52 @@ export default function ChatScreen() {
     }
   };
 
-  // 3. 語音通話與 AI 合成聲線檢測選單
-  const handleVoiceInput = () => {
-    setShowVoiceModal(true);
+  // 🎙️ 按住錄音：按下開始
+  const startRecording = () => {
+    if (isLoading) return;
+    setIsRecording(true);
+    setRecordingSeconds(0);
+    recordingStartRef.current = Date.now();
+
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    recordingTimerRef.current = setInterval(() => {
+      setRecordingSeconds((prev) => prev + 1);
+    }, 1000);
   };
 
-  // 4. 發送語音錄音與通話情境進行多模態深度辨識
-  const handleAnalyzeVoiceScenario = async (
-    scenario: (typeof SAMPLE_VOICE_SCENARIOS)[number]
-  ) => {
-    setShowVoiceModal(false);
-    setIsLoading(true);
+  // 🎙️ 鬆開手指：停止錄音並直接發送進行 AI 防詐分析
+  const stopRecordingAndSend = async () => {
+    if (!isRecording) return;
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    setIsRecording(false);
+
+    const duration = Math.max(1, Math.round((Date.now() - recordingStartRef.current) / 1000));
+    if (duration < 1) {
+      Alert.alert("錄音時間太短", "請長按麥克風進行說話錄音");
+      return;
+    }
 
     const timestamp = Date.now().toString();
     const userAudioMsg: ChatMessage = {
       id: `user-audio-${timestamp}`,
       sender: "user",
       type: "audio",
-      text: scenario.transcript,
-      audioName: scenario.title,
+      text: `語音錄音通話 (${duration} 秒)`,
+      audioName: `即時通話語音 (${duration}s)`,
     };
 
     saveMessages((current) => [...current, userAudioMsg]);
+    setIsLoading(true);
 
     try {
       const formData = new FormData();
       formData.append(
         "text",
-        `[🎵 通話錄音檔案分析: ${scenario.title}]。\n錄音逐字稿內容: "${scenario.transcript}"。\n請扮演台灣防詐專家，針對上述通話錄音進行多模態深度辨識：1. 詐騙風險指數 (0-100%) 2. 是否具備高壓急迫恐嚇/詐騙話術特徵 3. 是否疑似 AI 語音合成/Deepfake 克隆聲線 4. 具體防範處置建議。`
+        `[🎵 使用者即時錄音 (${duration} 秒)]。請扮演台灣專業防詐專家，針對此段來電通話進行深度詐騙意圖、情緒壓迫特徵與 AI 合成聲線 (Deepfake) 辨識，評估詐騙風險指數 (0-100%)，並給出核心警告原因與具體防範處置建議。`
       );
-
-      const dummyAudio = {
-        uri: Platform.OS === "android" ? `file://${scenario.filename}` : scenario.filename,
-        name: scenario.filename,
-        type: "audio/m4a",
-      };
-      // @ts-ignore
-      formData.append("scamAudio", dummyAudio);
 
       const response = await fetch(BACKEND_URL, {
         method: "POST",
@@ -255,16 +243,21 @@ export default function ChatScreen() {
       }
 
       if (imageToSend) {
-        const uriParts = imageToSend.split(".");
-        const fileType = uriParts[uriParts.length - 1]; // 取得檔名後綴
+        if (Platform.OS === "web") {
+          const blobRes = await fetch(imageToSend);
+          const blob = await blobRes.blob();
+          formData.append("scamImage", blob, "scam_picker.jpg");
+        } else {
+          const uriParts = imageToSend.split(".");
+          const fileType = uriParts[uriParts.length - 1] || "jpeg";
 
-        // 包裝成 Multer 接收的檔案流格式
-        // @ts-ignore
-        formData.append("scamImage", {
-          uri: Platform.OS === "android" ? imageToSend : imageToSend.replace("file://", ""),
-          name: `scam_picker.${fileType}`,
-          type: `image/${fileType === "png" ? "png" : "jpeg"}`,
-        });
+          // @ts-ignore
+          formData.append("scamImage", {
+            uri: imageToSend,
+            name: `scam_picker.${fileType}`,
+            type: fileType.toLowerCase() === "png" ? "image/png" : "image/jpeg",
+          });
+        }
       }
 
       // 4. 發送請求至後端 index.js -> scam-ai-core.js
@@ -411,13 +404,19 @@ export default function ChatScreen() {
             />
           </View>
 
+          {/* 🎙️ 按住錄音按鈕 */}
           <TouchableOpacity
-            style={styles.toolButton}
-            onPress={handleVoiceInput}
-            activeOpacity={0.75}
+            style={[styles.toolButton, isRecording && styles.toolButtonRecording]}
+            onPressIn={startRecording}
+            onPressOut={stopRecordingAndSend}
+            activeOpacity={0.6}
             disabled={isLoading}
           >
-            <Ionicons name="mic-outline" size={26} color="#397bf2" />
+            <Ionicons
+              name={isRecording ? "mic" : "mic-outline"}
+              size={26}
+              color={isRecording ? "#ef4444" : "#397bf2"}
+            />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -434,54 +433,18 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 🎙️ 語音通話與 AI Deepfake 檢測選擇彈窗 */}
-        <Modal visible={showVoiceModal} transparent animationType="fade">
-          <TouchableOpacity
-            style={styles.voiceOverlay}
-            activeOpacity={1}
-            onPress={() => setShowVoiceModal(false)}
-          >
-            <TouchableOpacity activeOpacity={1} style={styles.voiceCard}>
-              <View style={styles.voiceHeader}>
-                <View>
-                  <Text style={styles.voiceHeaderTitle}>實時語音與通話防詐檢測</Text>
-                  <Text style={styles.voiceHeaderSubtitle}>選擇通話錄音或可疑語音送交 AI 模型分析</Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.voiceClose}
-                  onPress={() => setShowVoiceModal(false)}
-                >
-                  <Ionicons name="close" size={20} color="#8a97a8" />
-                </TouchableOpacity>
-              </View>
-
-              {SAMPLE_VOICE_SCENARIOS.map((sc) => (
-                <TouchableOpacity
-                  key={sc.id}
-                  style={styles.voiceScenarioItem}
-                  activeOpacity={0.82}
-                  onPress={() => handleAnalyzeVoiceScenario(sc)}
-                >
-                  <View style={styles.voiceIconWrap}>
-                    <Ionicons name="volume-high" size={22} color="#397bf2" />
-                  </View>
-                  <View style={styles.voiceScenarioBody}>
-                    <Text style={styles.voiceScenarioTitle}>{sc.title}</Text>
-                    <Text style={styles.voiceScenarioDesc}>{sc.desc}</Text>
-                  </View>
-                  <Ionicons name="play-circle" size={26} color="#397bf2" />
-                </TouchableOpacity>
-              ))}
-
-              <View style={styles.voiceHintBox}>
-                <Ionicons name="shield-checkmark-outline" size={16} color="#10b981" />
-                <Text style={styles.voiceHintText}>
-                  支援辨識 TTS 合成語音、情緒壓迫與聲線異常。
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </Modal>
+        {/* 🎙️ 按住錄音時的懸浮提示 HUD */}
+        {isRecording && (
+          <View style={styles.recordingOverlay}>
+            <View style={styles.recordingPulse}>
+              <Ionicons name="mic" size={32} color="#ffffff" />
+            </View>
+            <Text style={styles.recordingText}>
+              正在錄音中... 00:{recordingSeconds < 10 ? `0${recordingSeconds}` : recordingSeconds}
+            </Text>
+            <Text style={styles.recordingHint}>鬆開手指即可直接發送分析</Text>
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -614,70 +577,45 @@ const styles = StyleSheet.create({
   audioTitle: { color: "#ffffff", fontSize: 13, fontWeight: "700", marginBottom: 2 },
   audioTranscript: { color: "rgba(255, 255, 255, 0.85)", fontSize: 11, lineHeight: 15 },
 
-  // 🎙️ 語音對話彈窗
-  voiceOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.45)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 20,
+  // 🎙️ 按住錄音浮動 HUD 樣式
+  toolButtonRecording: {
+    backgroundColor: "#fee2e2",
+    borderRadius: 8,
   },
-  voiceCard: {
-    width: "100%",
+  recordingOverlay: {
+    position: "absolute",
+    top: "38%",
+    left: "15%",
+    right: "15%",
+    backgroundColor: "rgba(17, 24, 39, 0.92)",
     borderRadius: 20,
-    backgroundColor: "#ffffff",
-    padding: 20,
+    paddingVertical: 24,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 12,
   },
-  voiceHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  voiceHeaderTitle: { fontSize: 17, fontWeight: "800", color: "#111827", marginBottom: 3 },
-  voiceHeaderSubtitle: { fontSize: 12, color: "#8a97a8" },
-  voiceClose: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#f1f5f9",
+  recordingPulse: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#ef4444",
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 12,
   },
-  voiceScenarioItem: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#f8fbff",
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
+  recordingText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 6,
   },
-  voiceIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "#eff6ff",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
+  recordingHint: {
+    color: "#cbd5e1",
+    fontSize: 12,
   },
-  voiceScenarioBody: { flex: 1 },
-  voiceScenarioTitle: { fontSize: 13, fontWeight: "700", color: "#1e293b", marginBottom: 2 },
-  voiceScenarioDesc: { fontSize: 11, color: "#64748b" },
-  voiceHintBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f0fdf4",
-    padding: 10,
-    borderRadius: 10,
-    marginTop: 4,
-  },
-  voiceHintText: { fontSize: 11, color: "#166534", marginLeft: 6, flex: 1 },
 });

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Text, TextInput } from "@/components/app-text";
 import { router, useLocalSearchParams } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -9,7 +9,9 @@ import {
   Pressable,
   SafeAreaView,
   ScrollView,
+  StyleSheet,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { getCurrentUser } from "@/utils/auth";
@@ -62,16 +64,57 @@ const riskStyles: Record<
   },
 };
 
-const getRiskLevel = (data: any, isScam: boolean): RiskLevel => {
-  const level = data.detail?.level || data.data?.level || data.level;
-  return level === "low" || level === "medium" || level === "high"
-    ? level
-    : isScam
-      ? "high"
-      : "low";
+const getRiskLevel = (score: number, isScam: boolean): RiskLevel => {
+  if (score >= 60 || isScam) return "high";
+  if (score >= 30) return "medium";
+  return "low";
 };
 
+function ScoringRulesCard() {
+  return (
+    <View style={localStyles.rulesCard}>
+      <View style={localStyles.rulesHeader}>
+        <Ionicons name="shield-checkmark" size={19} color="#397bf2" />
+        <Text style={localStyles.rulesTitle}>AI Shield 詐騙風險評分標準</Text>
+      </View>
+      <View style={localStyles.ruleItem}>
+        <View style={[localStyles.ruleBadge, { backgroundColor: "#fee2e2" }]}>
+          <Text style={[localStyles.ruleBadgeText, { color: "#dc2626" }]}>85 - 100 高危</Text>
+        </View>
+        <Text style={localStyles.ruleDesc}>
+          列入 165 反詐專線或大量民眾通報，具明確詐騙特徵，請立即封鎖！
+        </Text>
+      </View>
+      <View style={localStyles.ruleItem}>
+        <View style={[localStyles.ruleBadge, { backgroundColor: "#ffedd5" }]}>
+          <Text style={[localStyles.ruleBadgeText, { color: "#ea580c" }]}>60 - 84 中危</Text>
+        </View>
+        <Text style={localStyles.ruleDesc}>
+          多次被通報推銷、借貸或高壓引導，存在高度疑似詐騙風險。
+        </Text>
+      </View>
+      <View style={localStyles.ruleItem}>
+        <View style={[localStyles.ruleBadge, { backgroundColor: "#fef9c3" }]}>
+          <Text style={[localStyles.ruleBadgeText, { color: "#ca8a04" }]}>30 - 59 注意</Text>
+        </View>
+        <Text style={localStyles.ruleDesc}>
+          有零星通報或未知號碼，切勿輕易提供個人隱私資料或匯款。
+        </Text>
+      </View>
+      <View style={localStyles.ruleItem}>
+        <View style={[localStyles.ruleBadge, { backgroundColor: "#dcfce7" }]}>
+          <Text style={[localStyles.ruleBadgeText, { color: "#16a34a" }]}>0 - 29 安全</Text>
+        </View>
+        <Text style={localStyles.ruleDesc}>
+          資料庫查無不良通報紀錄，為正常通訊聯絡人，通訊安全無虞。
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export default function RiskQueryScreen() {
+  const { width } = useWindowDimensions();
   const params = useLocalSearchParams<{ type?: string }>();
   const initialMode: QueryMode = params.type === "line" ? "line" : "phone";
   const [mode, setMode] = useState<QueryMode>(initialMode);
@@ -80,30 +123,37 @@ export default function RiskQueryScreen() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [records, setRecords] = useState<QueryResult[]>([]);
+  const scrollRef = useRef<ScrollView>(null);
 
-  const value = mode === "phone" ? phone : lineId;
-  const setValue = mode === "phone" ? setPhone : setLineId;
-  const visibleRecords = useMemo(
-    () => records.filter((record) => record.kind === mode),
-    [mode, records]
-  );
+  useEffect(() => {
+    if (params.type === "line") {
+      setTimeout(() => {
+        scrollRef.current?.scrollTo({ x: width, animated: false });
+      }, 50);
+    }
+  }, [params.type, width]);
 
   const changeMode = (nextMode: QueryMode) => {
     Keyboard.dismiss();
     setMode(nextMode);
     setResult(null);
+    scrollRef.current?.scrollTo({
+      x: nextMode === "phone" ? 0 : width,
+      animated: true,
+    });
   };
 
-  const runQuery = async () => {
+  const runQuery = async (targetMode: QueryMode = mode) => {
+    const rawVal = targetMode === "phone" ? phone : lineId;
     const normalizedValue =
-      mode === "phone" ? phone.replace(/\D/g, "") : lineId.trim();
+      targetMode === "phone" ? rawVal.replace(/\D/g, "") : rawVal.trim();
 
-    if (mode === "phone" && normalizedValue.length < 6) {
+    if (targetMode === "phone" && normalizedValue.length < 6) {
       Alert.alert("查詢失敗", "請輸入至少 6 碼的有效電話號碼。");
       return;
     }
 
-    if (mode === "line" && !/^[A-Za-z0-9._@-]{3,}$/.test(normalizedValue)) {
+    if (targetMode === "line" && !/^[A-Za-z0-9._@-]{3,}$/.test(normalizedValue)) {
       Alert.alert(
         "查詢失敗",
         "LINE ID 至少需要 3 個字元，可使用英文、數字、底線、句點、@ 或連字號。"
@@ -117,8 +167,11 @@ export default function RiskQueryScreen() {
 
     try {
       setLoading(true);
-      const endpoint = mode === "phone" ? "check-phone" : "check-line";
-      const body = mode === "phone" ? { phone: normalizedValue } : { lineId: normalizedValue };
+      const endpoint = targetMode === "phone" ? "check-phone" : "check-line";
+      const body =
+        targetMode === "phone"
+          ? { phone: normalizedValue }
+          : { lineId: normalizedValue };
       const response = await fetch(`${API_BASE}/api/check/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -148,29 +201,45 @@ export default function RiskQueryScreen() {
         data.source === "database_found" ||
         data.data?.isScam === true ||
         data.detail?.isScam === true;
-      const level = getRiskLevel(data, isScam);
+
       const returnedValue =
-        mode === "phone"
+        targetMode === "phone"
           ? data.detail?.phone || data.data?.phone || data.phone || normalizedValue
-          : data.detail?.lineId || data.data?.lineId || data.lineId || data.line_id || normalizedValue;
+          : data.detail?.lineId ||
+            data.data?.lineId ||
+            data.lineId ||
+            data.line_id ||
+            normalizedValue;
+
       const score = Number(
         data.detail?.score || data.data?.score || data.score || (isScam ? 88 : 15)
       );
+      const clampedScore = Math.min(100, Math.max(0, score));
+      const level = getRiskLevel(clampedScore, isScam);
+
       const nextResult: QueryResult = {
-        id: `${mode}-${returnedValue}`,
-        kind: mode,
+        id: `${targetMode}-${returnedValue}`,
+        kind: targetMode,
         value: returnedValue,
         level,
-        score: Math.min(100, Math.max(0, score)),
+        score: clampedScore,
         message:
           data.detail?.message ||
           data.data?.message ||
           data.message ||
-          (isScam ? "資料庫中找到疑似詐騙紀錄。" : "目前資料庫中沒有相關風險紀錄。"),
+          (isScam
+            ? "資料庫中找到疑似詐騙紀錄。"
+            : "目前資料庫中沒有相關風險紀錄。"),
         detail:
-          mode === "phone"
-            ? data.detail?.carrier || data.data?.carrier || data.carrier || "未知電信"
-            : data.detail?.reason || data.data?.reason || data.reason || (isScam ? "已有風險紀錄" : "尚無通報紀錄"),
+          targetMode === "phone"
+            ? data.detail?.carrier ||
+              data.data?.carrier ||
+              data.carrier ||
+              "未知電信"
+            : data.detail?.reason ||
+              data.data?.reason ||
+              data.reason ||
+              (isScam ? "已有風險紀錄" : "尚無通報紀錄"),
         isScam,
       };
 
@@ -244,19 +313,234 @@ export default function RiskQueryScreen() {
         throw new Error(data.message || "無法送出通報");
       }
 
-      Alert.alert("通報成功", "已成功加入個人通報紀錄！感謝你的回報，我們會持續更新風險資料。");
+      Alert.alert(
+        "通報成功",
+        "已成功加入個人通報紀錄！感謝你的回報，我們會持續更新風險資料。"
+      );
     } catch (error: any) {
       Alert.alert("通報失敗", String(error?.message || error));
     }
   };
 
-  const palette = result ? riskStyles[result.level] : null;
+  // 渲染分頁內容（支援橫向滑動與各自分離的輸入狀態）
+  const renderQueryContent = (targetMode: QueryMode) => {
+    const isPhone = targetMode === "phone";
+    const currentValue = isPhone ? phone : lineId;
+    const setCurrentValue = isPhone ? setPhone : setLineId;
+    const isCurrentActive = mode === targetMode;
+    const activeResult = isCurrentActive ? result : null;
+    const currentPalette = activeResult ? riskStyles[activeResult.level] : null;
+    const targetRecords = records.filter((r) => r.kind === targetMode);
+
+    return (
+      <ScrollView
+        key={targetMode}
+        style={{ width }}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.queryPanel}>
+          <View style={styles.queryHeadingRow}>
+            <View style={styles.queryIcon}>
+              <Ionicons
+                name={isPhone ? "call-outline" : "chatbubble-ellipses-outline"}
+                size={27}
+                color="#397bf2"
+              />
+            </View>
+            <View style={styles.queryHeadingText}>
+              <Text style={styles.queryTitle}>
+                {isPhone ? "查詢電話號碼" : "查詢 LINE ID"}
+              </Text>
+              <Text style={styles.queryDescription}>
+                {isPhone
+                  ? "市話、手機與國際格式皆可輸入"
+                  : "輸入對方的 LINE ID 檢查風險"}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.inputWrap}>
+            <Ionicons
+              name={isPhone ? "keypad-outline" : "at-outline"}
+              size={23}
+              color="#7186a4"
+            />
+            <TextInput
+              style={styles.input}
+              value={currentValue}
+              onChangeText={setCurrentValue}
+              placeholder={isPhone ? "請輸入電話號碼" : "請輸入完整 LINE ID"}
+              placeholderTextColor="#97a7bd"
+              keyboardType={isPhone ? "phone-pad" : "default"}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+              onSubmitEditing={() => runQuery(targetMode)}
+            />
+            {currentValue.length > 0 ? (
+              <TouchableOpacity onPress={() => setCurrentValue("")}>
+                <Ionicons name="close-circle" size={22} color="#afbed1" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.queryButton, loading && styles.queryButtonDisabled]}
+            onPress={() => runQuery(targetMode)}
+            disabled={loading}
+            activeOpacity={0.84}
+          >
+            {loading && isCurrentActive ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Ionicons name="search" size={22} color="#ffffff" />
+            )}
+            <Text style={styles.queryButtonText}>
+              {loading && isCurrentActive ? "查詢中" : "立即查詢"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.tipCard}>
+          <Ionicons name="information-circle" size={24} color="#397bf2" />
+          <Text style={styles.tipText}>
+            {isPhone
+              ? "查不到紀錄不代表完全安全，陌生來電仍不要提供個資或驗證碼。"
+              : "陌生帳號要求匯款、加入投資群或購買點數時，請先確認身分。"}
+          </Text>
+        </View>
+
+        {/* 📊 明確的 AI-Shield 詐騙評分標準 */}
+        <ScoringRulesCard />
+
+        {/* 查詢結果卡片 */}
+        {activeResult && currentPalette ? (
+          <View style={styles.resultSection}>
+            <Text style={styles.sectionTitle}>查詢結果</Text>
+            <View
+              style={[
+                styles.riskBanner,
+                { backgroundColor: currentPalette.background },
+              ]}
+            >
+              <View
+                style={[
+                  styles.riskIcon,
+                  { backgroundColor: `${currentPalette.color}18` },
+                ]}
+              >
+                <Ionicons
+                  name={currentPalette.icon}
+                  size={32}
+                  color={currentPalette.color}
+                />
+              </View>
+              <View style={styles.riskText}>
+                <Text
+                  style={[styles.riskLabel, { color: currentPalette.color }]}
+                >
+                  {currentPalette.label}
+                </Text>
+                <Text style={styles.resultValue}>{activeResult.value}</Text>
+              </View>
+              <Text style={[styles.score, { color: currentPalette.color }]}>
+                {activeResult.score}
+              </Text>
+            </View>
+
+            <View style={styles.resultDetails}>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>
+                  {activeResult.kind === "phone" ? "電信資訊" : "資料庫狀態"}
+                </Text>
+                <Text style={styles.detailValue}>{activeResult.detail}</Text>
+              </View>
+              <View style={styles.resultDivider} />
+              <Text style={styles.resultMessage}>{activeResult.message}</Text>
+            </View>
+
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={addToBlacklist}
+              >
+                <Ionicons name="ban-outline" size={20} color="#2d5fa9" />
+                <Text style={styles.secondaryButtonText}>加入黑名單</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.reportButton}
+                onPress={submitReport}
+              >
+                <Ionicons name="flag-outline" size={20} color="#ffffff" />
+                <Text style={styles.reportButtonText}>我要通報</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
+
+        {/* 歷史查詢紀錄 */}
+        <View style={styles.historySection}>
+          <Text style={styles.sectionTitle}>
+            {isPhone ? "電話查詢紀錄" : "LINE ID 查詢紀錄"}
+          </Text>
+          {targetRecords.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="time-outline" size={31} color="#a3b1c3" />
+              <Text style={styles.emptyTitle}>尚無查詢紀錄</Text>
+              <Text style={styles.emptyText}>完成查詢後會顯示在這裡</Text>
+            </View>
+          ) : (
+            targetRecords.map((record) => {
+              const recordPalette = riskStyles[record.level];
+              return (
+                <TouchableOpacity
+                  key={record.id}
+                  style={styles.historyRow}
+                  onPress={() => setResult(record)}
+                  activeOpacity={0.8}
+                >
+                  <View
+                    style={[
+                      styles.historyIcon,
+                      { backgroundColor: recordPalette.background },
+                    ]}
+                  >
+                    <Ionicons
+                      name={recordPalette.icon}
+                      size={21}
+                      color={recordPalette.color}
+                    />
+                  </View>
+                  <Text style={styles.historyValue}>{record.value}</Text>
+                  <Text
+                    style={[
+                      styles.historyRisk,
+                      { color: recordPalette.color },
+                    ]}
+                  >
+                    {recordPalette.label}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={19} color="#9caabd" />
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </View>
+      </ScrollView>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <Pressable style={styles.flex} onPress={Keyboard.dismiss}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
             <Ionicons name="chevron-back" size={28} color="#182235" />
           </TouchableOpacity>
           <View style={styles.headerText}>
@@ -265,12 +549,8 @@ export default function RiskQueryScreen() {
           <View style={styles.headerSpacer} />
         </View>
 
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          showsVerticalScrollIndicator={false}
-        >
+        {/* 頂部切換頁籤 */}
+        <View style={localStyles.segmentContainer}>
           <View style={styles.segmentedControl}>
             <TouchableOpacity
               style={[styles.segment, mode === "phone" && styles.segmentActive]}
@@ -312,154 +592,81 @@ export default function RiskQueryScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+        </View>
 
-          <View style={styles.queryPanel}>
-            <View style={styles.queryHeadingRow}>
-              <View style={styles.queryIcon}>
-                <Ionicons
-                  name={mode === "phone" ? "call-outline" : "chatbubble-ellipses-outline"}
-                  size={27}
-                  color="#397bf2"
-                />
-              </View>
-              <View style={styles.queryHeadingText}>
-                <Text style={styles.queryTitle}>
-                  {mode === "phone" ? "查詢電話號碼" : "查詢 LINE ID"}
-                </Text>
-                <Text style={styles.queryDescription}>
-                  {mode === "phone"
-                    ? "市話、手機與國際格式皆可輸入"
-                    : "輸入對方的 LINE ID 檢查風險"}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.inputWrap}>
-              <Ionicons
-                name={mode === "phone" ? "keypad-outline" : "at-outline"}
-                size={23}
-                color="#7186a4"
-              />
-              <TextInput
-                style={styles.input}
-                value={value}
-                onChangeText={setValue}
-                placeholder={mode === "phone" ? "請輸入電話號碼" : "請輸入完整 LINE ID"}
-                placeholderTextColor="#97a7bd"
-                keyboardType={mode === "phone" ? "phone-pad" : "default"}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="search"
-                onSubmitEditing={runQuery}
-              />
-              {value.length > 0 ? (
-                <TouchableOpacity onPress={() => setValue("")}>
-                  <Ionicons name="close-circle" size={22} color="#afbed1" />
-                </TouchableOpacity>
-              ) : null}
-            </View>
-
-            <TouchableOpacity
-              style={[styles.queryButton, loading && styles.queryButtonDisabled]}
-              onPress={runQuery}
-              disabled={loading}
-              activeOpacity={0.84}
-            >
-              {loading ? <ActivityIndicator color="#ffffff" /> : <Ionicons name="search" size={22} color="#ffffff" />}
-              <Text style={styles.queryButtonText}>
-                {loading ? "查詢中" : "立即查詢"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.tipCard}>
-            <Ionicons name="information-circle" size={24} color="#397bf2" />
-            <Text style={styles.tipText}>
-              {mode === "phone"
-                ? "查不到紀錄不代表完全安全，陌生來電仍不要提供個資或驗證碼。"
-                : "陌生帳號要求匯款、加入投資群或購買點數時，請先確認身分。"}
-            </Text>
-          </View>
-
-          {result && palette ? (
-            <View style={styles.resultSection}>
-              <Text style={styles.sectionTitle}>查詢結果</Text>
-              <View style={[styles.riskBanner, { backgroundColor: palette.background }]}>
-                <View style={[styles.riskIcon, { backgroundColor: `${palette.color}18` }]}>
-                  <Ionicons name={palette.icon} size={32} color={palette.color} />
-                </View>
-                <View style={styles.riskText}>
-                  <Text style={[styles.riskLabel, { color: palette.color }]}>
-                    {palette.label}
-                  </Text>
-                  <Text style={styles.resultValue}>{result.value}</Text>
-                </View>
-                <Text style={[styles.score, { color: palette.color }]}>
-                  {result.score}
-                </Text>
-              </View>
-
-              <View style={styles.resultDetails}>
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>
-                    {result.kind === "phone" ? "電信資訊" : "資料庫狀態"}
-                  </Text>
-                  <Text style={styles.detailValue}>{result.detail}</Text>
-                </View>
-                <View style={styles.resultDivider} />
-                <Text style={styles.resultMessage}>{result.message}</Text>
-              </View>
-
-              <View style={styles.actionRow}>
-                <TouchableOpacity style={styles.secondaryButton} onPress={addToBlacklist}>
-                  <Ionicons name="ban-outline" size={20} color="#2d5fa9" />
-                  <Text style={styles.secondaryButtonText}>
-                    加入黑名單
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.reportButton} onPress={submitReport}>
-                  <Ionicons name="flag-outline" size={20} color="#ffffff" />
-                  <Text style={styles.reportButtonText}>我要通報</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ) : null}
-
-          <View style={styles.historySection}>
-            <Text style={styles.sectionTitle}>
-              {mode === "phone" ? "電話查詢紀錄" : "LINE ID 查詢紀錄"}
-            </Text>
-            {visibleRecords.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Ionicons name="time-outline" size={31} color="#a3b1c3" />
-                <Text style={styles.emptyTitle}>尚無查詢紀錄</Text>
-                <Text style={styles.emptyText}>完成查詢後會顯示在這裡</Text>
-              </View>
-            ) : (
-              visibleRecords.map((record) => {
-                const recordPalette = riskStyles[record.level];
-                return (
-                  <TouchableOpacity
-                    key={record.id}
-                    style={styles.historyRow}
-                    onPress={() => setResult(record)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={[styles.historyIcon, { backgroundColor: recordPalette.background }]}>
-                      <Ionicons name={recordPalette.icon} size={21} color={recordPalette.color} />
-                    </View>
-                    <Text style={styles.historyValue}>{record.value}</Text>
-                    <Text style={[styles.historyRisk, { color: recordPalette.color }]}>
-                      {recordPalette.label}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={19} color="#9caabd" />
-                  </TouchableOpacity>
-                );
-              })
-            )}
-          </View>
+        {/* 橫向滑動主容器 */}
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(e) => {
+            const pageIndex = Math.round(e.nativeEvent.contentOffset.x / width);
+            const targetMode: QueryMode = pageIndex === 0 ? "phone" : "line";
+            if (mode !== targetMode) {
+              setMode(targetMode);
+              setResult(null);
+            }
+          }}
+        >
+          {renderQueryContent("phone")}
+          {renderQueryContent("line")}
         </ScrollView>
       </Pressable>
     </SafeAreaView>
   );
 }
+
+const localStyles = StyleSheet.create({
+  segmentContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+  },
+  rulesCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    shadowColor: "#0f172a",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  rulesHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  rulesTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0f172a",
+    marginLeft: 6,
+  },
+  ruleItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  ruleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginRight: 10,
+    minWidth: 84,
+    alignItems: "center",
+  },
+  ruleBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  ruleDesc: {
+    fontSize: 12,
+    color: "#475569",
+    flex: 1,
+    lineHeight: 16,
+  },
+});
