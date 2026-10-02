@@ -49,26 +49,7 @@ const formatReportTarget = (report: ReportItem) => {
   return report.target;
 };
 
-const defaultReports: ReportItem[] = [
-  {
-    id: "r1",
-    target: "+886 987 654 321",
-    type: "電話",
-    reason: "疑似假客服要求操作 ATM",
-    status: "已確認",
-    risk: "high",
-    date: "今天 11:24",
-  },
-  {
-    id: "r2",
-    target: "@1234",
-    type: "LINE ID",
-    reason: "投資群組邀請與可疑匯款要求",
-    status: "審核中",
-    risk: "medium",
-    date: "昨天 18:06",
-  },
-];
+const defaultReports: ReportItem[] = [];
 
 const statusStyleMap: Record<
   ReportStatus,
@@ -126,7 +107,7 @@ export default function ReportsScreen() {
 
       const res = await fetch(url);
       const data = await res.json();
-      if (res.ok && data.success && Array.isArray(data.data) && data.data.length > 0) {
+      if (res.ok && data.success && Array.isArray(data.data)) {
         const fetchedReports: ReportItem[] = data.data.map((r: any) => ({
           id: String(r.id),
           target: String(r.target || ""),
@@ -277,8 +258,8 @@ export default function ReportsScreen() {
         ) : (
           <View style={styles.emptyCard}>
             <Ionicons name="document-text-outline" size={38} color="#b8c5d8" />
-            <Text style={styles.emptyTitle}>沒有符合的通報紀錄</Text>
-            <Text style={styles.emptyText}>切換其他分類，或從查詢結果頁送出新的通報。</Text>
+            <Text style={styles.emptyTitle}>尚無個人通報紀錄</Text>
+            <Text style={styles.emptyText}>遇到可疑電話或 LINE 帳號時，可從查詢結果頁點擊「我要通報」，共同守護防詐安全網。</Text>
           </View>
         )}
       </ScrollView>

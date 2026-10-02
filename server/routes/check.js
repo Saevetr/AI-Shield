@@ -402,6 +402,65 @@ router.delete("/blacklist/:id", async (req, res) => {
   }
 });
 
+// 🔒 取得個人專屬通報紀錄端點
+router.get("/reports", async (req, res) => {
+  const userId = req.query.userId || req.query.user_id;
+
+  // 嚴格個人化：若未登入或無 userId，直接回傳空陣列，絕不外洩其他人的通報紀錄
+  if (!userId) {
+    return res.json({ success: true, data: [] });
+  }
+
+  try {
+    const sqlText =
+      "SELECT blacklist_id as id, blacklist_value as target, blacklist_type as type, note as reason, created_at, '已確認' as status, 'high' as risk FROM blacklist WHERE user_id = ? AND (note LIKE '%通報%' OR note LIKE '%使用者%') ORDER BY created_at DESC";
+    const [rows] = await db.query(sqlText, [userId]);
+    return res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error("Failed to load personal reports:", error);
+    return res.status(500).json({ success: false, message: "讀取個人通報紀錄失敗" });
+  }
+});
+
+// 通用個人通報端點（支援電話與 LINE）
+router.post("/report", async (req, res) => {
+  const userId = req.body.userId || req.body.user_id || null;
+  const rawType = String(req.body.type || "").toUpperCase();
+  const type = rawType === "LINE" || rawType === "LINE ID" ? "LINE" : "PHONE";
+  const value = String(req.body.value || req.body.target || req.body.lineId || req.body.phone || "").trim();
+  const reason = String(req.body.reason || "使用者主動通報可疑詐騙").trim();
+
+  if (!value || value.length < 3) {
+    return res.status(400).json({ success: false, message: "請輸入有效的通報號碼或帳號" });
+  }
+
+  try {
+    const [existingRows] = await db.query(
+      "SELECT blacklist_id FROM blacklist WHERE LOWER(LTRIM(RTRIM(blacklist_value))) = LOWER(?) AND user_id = ? LIMIT 1",
+      [value, userId]
+    );
+
+    if (existingRows.length === 0) {
+      try {
+        await db.query(
+          "INSERT INTO blacklist (user_id, blacklist_type, blacklist_value, note, created_at) VALUES (?, ?, ?, ?, GETDATE())",
+          [userId, type, value, `使用者通報：${reason}`]
+        );
+      } catch (err) {
+        await db.query(
+          "INSERT INTO blacklist (blacklist_type, blacklist_value, note, created_at) VALUES (?, ?, ?, GETDATE())",
+          [type, value, `使用者通報：${reason}`]
+        );
+      }
+    }
+
+    return res.json({ success: true, message: "通報成功！感謝您的守護回報", data: { type, value, reason } });
+  } catch (error) {
+    console.error("Failed to submit report:", error);
+    return res.status(500).json({ success: false, message: "通報寫入失敗" });
+  }
+});
+
 router.post("/report-line", async (req, res) => {
   const lineId = normalizeLineId(req.body.lineId);
   const reason = String(req.body.reason || "使用者主動通報").trim();
@@ -435,25 +494,6 @@ router.post("/report-line", async (req, res) => {
   } catch (error) {
     console.error("Failed to report LINE ID:", error);
     return res.status(500).json({ success: false, message: "通報寫入失敗" });
-  }
-});
-
-// 取得通報紀錄端點
-router.get("/reports", async (req, res) => {
-  const userId = req.query.userId || req.query.user_id;
-  try {
-    let sqlText = "SELECT blacklist_id as id, blacklist_value as target, blacklist_type as type, note as reason, created_at, '已確認' as status, 'high' as risk FROM blacklist WHERE note LIKE '%通報%'";
-    const params = [];
-    if (userId) {
-      sqlText += " AND (user_id = ? OR user_id IS NULL)";
-      params.push(userId);
-    }
-    sqlText += " ORDER BY created_at DESC";
-    const [rows] = await db.query(sqlText, params);
-    return res.json({ success: true, data: rows });
-  } catch (error) {
-    console.error("Failed to load reports:", error);
-    return res.status(500).json({ success: false, message: "讀取通報紀錄失敗" });
   }
 });
 

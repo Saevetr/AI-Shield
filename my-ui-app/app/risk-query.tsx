@@ -221,18 +221,19 @@ export default function RiskQueryScreen() {
     }
   };
 
-  const reportLineId = async () => {
-    if (!result || result.kind !== "line") return;
+  const submitReport = async () => {
+    if (!result) return;
 
     try {
       const currentUser = await getCurrentUser();
       const currentUserId = currentUser?.user_id || currentUser?.userId || null;
 
-      const response = await fetch(`${API_BASE}/api/check/report-line`, {
+      const response = await fetch(`${API_BASE}/api/check/report`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          lineId: result.value,
+          type: result.kind === "line" ? "LINE" : "PHONE",
+          value: result.value,
           reason: result.message,
           userId: currentUserId,
         }),
@@ -243,7 +244,7 @@ export default function RiskQueryScreen() {
         throw new Error(data.message || "無法送出通報");
       }
 
-      Alert.alert("通報成功", "感謝你的回報，我們會持續更新風險資料。");
+      Alert.alert("通報成功", "已成功加入個人通報紀錄！感謝你的回報，我們會持續更新風險資料。");
     } catch (error: any) {
       Alert.alert("通報失敗", String(error?.message || error));
     }
@@ -416,12 +417,10 @@ export default function RiskQueryScreen() {
                     加入黑名單
                   </Text>
                 </TouchableOpacity>
-                {result.kind === "line" ? (
-                  <TouchableOpacity style={styles.reportButton} onPress={reportLineId}>
-                    <Ionicons name="flag-outline" size={20} color="#ffffff" />
-                    <Text style={styles.reportButtonText}>我要通報</Text>
-                  </TouchableOpacity>
-                ) : null}
+                <TouchableOpacity style={styles.reportButton} onPress={submitReport}>
+                  <Ionicons name="flag-outline" size={20} color="#ffffff" />
+                  <Text style={styles.reportButtonText}>我要通報</Text>
+                </TouchableOpacity>
               </View>
             </View>
           ) : null}

@@ -72,14 +72,18 @@ async function analyzeScamAPI(req, res) {
 
         // 2. 處理語音功能 (多模態直接輸入音檔)
         if (scamAudioFile) {
-            const ext = path.extname(scamAudioFile.path).toLowerCase();
-            let mimeType = 'audio/mp3';
-            if (ext === '.wav') mimeType = 'audio/wav';
-            if (ext === '.m4a') mimeType = 'audio/m4a';
+            const ext = (path.extname(scamAudioFile.originalname || scamAudioFile.path) || '').toLowerCase();
+            let mimeType = scamAudioFile.mimetype || 'audio/mp3';
+            if (ext === '.wav' || mimeType.includes('wav')) mimeType = 'audio/wav';
+            else if (ext === '.m4a' || mimeType.includes('m4a') || mimeType.includes('mp4')) mimeType = 'audio/m4a';
+            else if (ext === '.webm' || mimeType.includes('webm')) mimeType = 'audio/webm';
+            else if (ext === '.ogg' || mimeType.includes('ogg')) mimeType = 'audio/ogg';
+            else if (ext === '.aac' || mimeType.includes('aac')) mimeType = 'audio/aac';
+            else if (ext === '.mp3' || mimeType.includes('mpeg')) mimeType = 'audio/mp3';
 
             const audioPart = fileToGenerativePart(scamAudioFile.path, mimeType);
             currentParts.push(audioPart);
-            console.log(`\n[🎵 系統收到即時錄音檔]: ${scamAudioFile.path}`);
+            console.log(`\n[🎵 系統收到即時錄音檔]: ${scamAudioFile.path} (${mimeType})`);
         }
 
         // 3. 處理文字對話
