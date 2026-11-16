@@ -74,7 +74,7 @@ const BACKEND_URL = `${API_URL}/api/analyze-scam`;
 export default function ChatScreen() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -226,8 +226,8 @@ export default function ChatScreen() {
       quality: 0.85,
     });
 
-    if (!result.canceled) {
-      setSelectedImage(result.assets[0].uri);
+    if (!result.canceled && result.assets[0]) {
+      setSelectedImage(result.assets[0]);
     }
   };
 
@@ -409,6 +409,7 @@ export default function ChatScreen() {
 
   // 🚀 核心：打包 FormData 並請求後端的 scam-ai-core 分析
   const handleSend = async () => {
+    if (isLoading) return;
     const trimmedMessage = message.trim();
 
     // 防呆：如果沒打字也沒選圖片，就不發送
@@ -423,7 +424,7 @@ export default function ChatScreen() {
         id: `user-img-${timestamp}`,
         sender: "user",
         type: "image",
-        uri: selectedImage,
+        uri: selectedImage.uri,
       });
     }
 
@@ -456,19 +457,25 @@ export default function ChatScreen() {
 
       if (imageToSend) {
         if (Platform.OS === "web") {
-          const blobRes = await fetch(imageToSend);
-          const blob = await blobRes.blob();
-          formData.append("scamImage", blob, "scam_picker.jpg");
+          const blob = imageToSend.file || await (await fetch(imageToSend.uri)).blob();
+          formData.append("scamImage", blob, imageToSend.fileName || "scam_picker");
         } else {
-          const uriParts = imageToSend.split(".");
-          const fileType = uriParts[uriParts.length - 1] || "jpeg";
+          const extension = (imageToSend.fileName || imageToSend.uri)
+            .split(/[?#]/)[0].match(/\.([a-z0-9]+)$/i)?.[1].toLowerCase();
+          const imageTypes: Record<string, string> = {
+            jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+            webp: "image/webp", heic: "image/heic", heif: "image/heif",
+          };
+          const mimeType = imageToSend.mimeType || imageTypes[extension || ""];
+          if (!mimeType) {
+            throw new Error("無法辨識圖片格式，請改用 JPG 或 PNG 圖片再試一次。");
+          }
 
-          // @ts-ignore
           formData.append("scamImage", {
-            uri: imageToSend,
-            name: `scam_picker.${fileType}`,
-            type: fileType.toLowerCase() === "png" ? "image/png" : "image/jpeg",
-          });
+            uri: imageToSend.uri,
+            name: imageToSend.fileName || `scam_picker.${extension || mimeType.split("/")[1]}`,
+            type: mimeType,
+          } as unknown as Blob);
         }
       }
 
@@ -479,10 +486,12 @@ export default function ChatScreen() {
         body: formData,
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => {
+        throw new Error(`伺服器未回傳有效分析結果（HTTP ${response.status}），請稍後再試。`);
+      });
 
       // 5. 成功收到 Gemini 回傳的分析報告，塞入對話紀錄（靠左顯示）
-      if (result.success && result.data?.analysisReport) {
+      if (response.ok && result.success && result.data?.analysisReport) {
         setMessages((current) => [
           ...current,
           {
@@ -493,11 +502,15 @@ export default function ChatScreen() {
           },
         ]);
       } else {
-        throw new Error(result.message || "分析失敗");
+        const reason = typeof result.error === "string" ? result.error : result.message;
+        throw new Error(reason || `分析失敗（HTTP ${response.status}）`);
       }
     } catch (error) {
       console.error("Scam Core API Error:", error);
-      Alert.alert("分析失敗", "無法連線防詐分析伺服器，請確認網路與後端服務狀態。");
+      const reason = error instanceof Error ? error.message : "無法連線防詐分析伺服器，請稍後再試。";
+      Alert.alert("分析失敗", reason.slice(0, 500));
+      setSelectedImage(imageToSend);
+      setMessage(trimmedMessage);
     } finally {
       setIsLoading(false);
     }
@@ -593,7 +606,7 @@ export default function ChatScreen() {
         {/* 挑選圖片後的預覽小框（位於輸入欄上方，可隨時取消） */}
         {selectedImage && (
           <View style={styles.previewContainer}>
-            <Image source={{ uri: selectedImage }} style={styles.previewImage} />
+            <Image source={{ uri: selectedImage.uri }} style={styles.previewImage} />
             <TouchableOpacity style={styles.closePreview} onPress={() => setSelectedImage(null)}>
               <Ionicons name="close-circle" size={22} color="#ff4d4f" />
             </TouchableOpacity>
