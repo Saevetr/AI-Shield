@@ -23,7 +23,7 @@ const uploadDir = path.join(__dirname, "uploads");
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
-const upload = multer({ dest: uploadDir });
+const upload = multer({ dest: "uploads/" });
 
 // 3. 根路由測試
 app.get("/", (req, res) => {

@@ -62,22 +62,8 @@ async function analyzeScamAPI(req, res) {
 
         // 1. 處理圖片辨識
         if (scamImageFile) {
-            // Multer's temporary filename has no extension; use the uploaded asset metadata.
-            const ext = path.extname(scamImageFile.originalname || '').toLowerCase();
-            const imageTypes = {
-                '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
-                '.webp': 'image/webp', '.heic': 'image/heic', '.heif': 'image/heif'
-            };
-            const uploadedType = (scamImageFile.mimetype || '').toLowerCase();
-            const mimeType = uploadedType.startsWith('image/')
-                ? (uploadedType === 'image/jpg' ? 'image/jpeg' : uploadedType)
-                : imageTypes[ext];
-            if (!mimeType || !Object.values(imageTypes).includes(mimeType)) {
-                return res.status(415).json({
-                    success: false,
-                    message: '無法辨識圖片格式，請使用 JPG、PNG、WEBP、HEIC 或 HEIF 圖片。'
-                });
-            }
+            const ext = path.extname(scamImageFile.path).toLowerCase();
+            const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
             
             const imagePart = fileToGenerativePart(scamImageFile.path, mimeType);
             currentParts.push(imagePart);
@@ -148,12 +134,6 @@ async function analyzeScamAPI(req, res) {
         });
 
         const aiResponseText = response.text || "";
-        if (!aiResponseText.trim()) {
-            return res.status(502).json({
-                success: false,
-                message: 'AI 未回傳分析內容，請確認圖片清晰後重新傳送。'
-            });
-        }
         console.log(`\n=== 🚨 實時防詐多模態分析結果 ===\n${aiResponseText}\n=======================================`);
 
         // 6. 回傳分析報告給前端
