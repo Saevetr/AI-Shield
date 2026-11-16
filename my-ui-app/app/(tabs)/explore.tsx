@@ -1789,6 +1789,7 @@ const styles = StyleSheet.create({
   mainKnowledgeTitle: {
     color: "#111827",
     fontSize: 21,
+    lineHeight: 32,
     fontWeight: "900",
     marginBottom: 7,
   },
@@ -1821,7 +1822,7 @@ const styles = StyleSheet.create({
     color: "#5b6678",
     fontSize: 14,
     fontWeight: "700",
-    lineHeight: 21,
+    lineHeight: 26,
     marginBottom: 10,
   },
   knowledgeSection: {
@@ -1854,7 +1855,7 @@ const styles = StyleSheet.create({
     color: "#374151",
     fontSize: 13,
     fontWeight: "700",
-    lineHeight: 22,
+    lineHeight: 26,
   },
   cardDivider: {
     height: 1,
@@ -1888,7 +1889,7 @@ const styles = StyleSheet.create({
     color: "#374151",
     fontSize: 13,
     fontWeight: "700",
-    lineHeight: 20,
+    lineHeight: 25,
   },
   infoStrip: {
     minHeight: 46,
@@ -1905,7 +1906,7 @@ const styles = StyleSheet.create({
     color: "#1664c8",
     fontSize: 12,
     fontWeight: "800",
-    lineHeight: 18,
+    lineHeight: 23,
   },
   compactCardList: {
     marginHorizontal: 4,
@@ -1957,6 +1958,7 @@ const styles = StyleSheet.create({
   compactTitle: {
     color: "#111827",
     fontSize: 16,
+    lineHeight: 24,
     fontWeight: "900",
     marginBottom: 6,
   },
@@ -2366,13 +2368,13 @@ const styles = StyleSheet.create({
     color: "#111827",
     fontSize: 22,
     fontWeight: "900",
-    lineHeight: 31,
+    lineHeight: 36,
   },
   detailSummary: {
     color: "#607697",
     fontSize: 13,
     fontWeight: "700",
-    lineHeight: 20,
+    lineHeight: 25,
     marginTop: 10,
   },
   detailMetaRow: {
@@ -2433,8 +2435,8 @@ const styles = StyleSheet.create({
     color: "#334155",
     fontSize: 13,
     fontWeight: "700",
-    lineHeight: 22,
-    marginBottom: 3,
+    lineHeight: 26,
+    marginBottom: 6,
   },
   warningTagWrap: {
     flexDirection: "row",
@@ -2463,7 +2465,7 @@ const styles = StyleSheet.create({
     color: "#334155",
     fontSize: 13,
     fontWeight: "700",
-    lineHeight: 20,
+    lineHeight: 25,
   },
   paragraphBlock: {
     borderTopWidth: 1,
@@ -2480,7 +2482,7 @@ const styles = StyleSheet.create({
     color: "#334155",
     fontSize: 14,
     fontWeight: "600",
-    lineHeight: 24,
+    lineHeight: 28,
     marginBottom: 12,
   },
   officialButton: {

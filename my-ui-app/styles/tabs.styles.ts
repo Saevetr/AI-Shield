@@ -2,12 +2,10 @@ import { Platform ,StyleSheet } from "react-native";
 
 export const tabLayoutStyles = StyleSheet.create({
   tabBar: {
-    height: Platform.OS === "ios" ? 88 : 84,
     backgroundColor: "#ffffff",
     borderTopWidth: 1,
     borderTopColor: "#dbe5f1",
     paddingTop: 6,
-    paddingBottom: Platform.OS === "ios" ? 8 : 6,
     shadowColor: "#64748b",
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.08,
@@ -17,20 +15,24 @@ export const tabLayoutStyles = StyleSheet.create({
   tabItem: {
     flex: 1,
     minWidth: 0,
-    alignItems: "center",
+  },
+  tabButton: {
+    paddingVertical: 0,
     justifyContent: "center",
   },
-  tabIconWrap: {
-    width: "100%",
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
+  hiddenTabItem: {
+    display: "none",
+  },
+  tabIcon: {
+    width: 56,
+    height: 30,
+    flexGrow: 0,
   },
   iconBox: {
     alignSelf: "center",
     width: 50,
-    height: 42,
-    borderRadius: 12,
+    height: 30,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1.5,
@@ -42,10 +44,9 @@ export const tabLayoutStyles = StyleSheet.create({
     borderColor: "#397bf2",
   },
   tabLabel: {
-    width: "100%",
     color: "#607083",
-    fontSize: 9,
-    lineHeight: 13,
+    fontSize: 14,
+    lineHeight: 20,
     marginTop: 2,
     fontWeight: "800",
     textAlign: "center",
@@ -335,6 +336,7 @@ export const exploreStyles = StyleSheet.create({
   mainKnowledgeTitle: {
     color: "#111827",
     fontSize: 21,
+    lineHeight: 32,
     fontWeight: "900",
     marginBottom: 7,
   },
@@ -367,7 +369,7 @@ export const exploreStyles = StyleSheet.create({
     color: "#5b6678",
     fontSize: 14,
     fontWeight: "700",
-    lineHeight: 21,
+    lineHeight: 26,
     marginBottom: 10,
   },
   knowledgeSection: {
@@ -400,7 +402,7 @@ export const exploreStyles = StyleSheet.create({
     color: "#374151",
     fontSize: 13,
     fontWeight: "700",
-    lineHeight: 22,
+    lineHeight: 26,
   },
   cardDivider: {
     height: 1,
@@ -434,7 +436,7 @@ export const exploreStyles = StyleSheet.create({
     color: "#374151",
     fontSize: 13,
     fontWeight: "700",
-    lineHeight: 20,
+    lineHeight: 25,
   },
   infoStrip: {
     minHeight: 46,
@@ -451,7 +453,7 @@ export const exploreStyles = StyleSheet.create({
     color: "#1664c8",
     fontSize: 12,
     fontWeight: "800",
-    lineHeight: 18,
+    lineHeight: 23,
   },
   compactCardList: {
     marginHorizontal: 4,
@@ -503,6 +505,7 @@ export const exploreStyles = StyleSheet.create({
   compactTitle: {
     color: "#111827",
     fontSize: 16,
+    lineHeight: 24,
     fontWeight: "900",
     marginBottom: 6,
   },
@@ -912,13 +915,13 @@ export const exploreStyles = StyleSheet.create({
     color: "#111827",
     fontSize: 22,
     fontWeight: "900",
-    lineHeight: 31,
+    lineHeight: 36,
   },
   detailSummary: {
     color: "#607697",
     fontSize: 13,
     fontWeight: "700",
-    lineHeight: 20,
+    lineHeight: 25,
     marginTop: 10,
   },
   detailMetaRow: {
@@ -979,8 +982,8 @@ export const exploreStyles = StyleSheet.create({
     color: "#334155",
     fontSize: 13,
     fontWeight: "700",
-    lineHeight: 22,
-    marginBottom: 3,
+    lineHeight: 26,
+    marginBottom: 6,
   },
   warningTagWrap: {
     flexDirection: "row",
@@ -1009,7 +1012,7 @@ export const exploreStyles = StyleSheet.create({
     color: "#334155",
     fontSize: 13,
     fontWeight: "700",
-    lineHeight: 20,
+    lineHeight: 25,
   },
   paragraphBlock: {
     borderTopWidth: 1,
@@ -1026,7 +1029,7 @@ export const exploreStyles = StyleSheet.create({
     color: "#334155",
     fontSize: 14,
     fontWeight: "600",
-    lineHeight: 24,
+    lineHeight: 28,
     marginBottom: 12,
   },
   officialButton: {
