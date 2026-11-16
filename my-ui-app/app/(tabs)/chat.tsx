@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Text, TextInput } from "@/components/app-text";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from 'react-native-markdown-display';
@@ -32,7 +33,7 @@ try {
   NativeSpeechModule = null;
 }
 
-// 常用可疑通話語音範例（提供點選快速辨識，免受語音檔案無法解析之苦）
+// 常用可疑通話語音範例
 const VOICE_PRESETS = [
   {
     title: "假檢警：帳戶洗錢配合監管",
@@ -48,7 +49,6 @@ const VOICE_PRESETS = [
   },
 ];
 
-// 擴充訊息型別定義：支援文字、圖片、通話錄音多模態分析
 type ChatMessage = {
   id: string;
   sender: "user" | "ai";
@@ -56,6 +56,36 @@ type ChatMessage = {
   text?: string;
   uri?: string;
   audioName?: string;
+  psychologyAnalysis?: boolean;
+};
+
+type PsychologySignal = { label: string; score: number };
+type PsychologyReport = {
+  quote?: string;
+  alert?: string;
+  signals?: PsychologySignal[];
+  summary?: string;
+};
+
+const parsePsychologyReport = (text = ""): PsychologyReport => {
+  try {
+    const jsonText = text.match(/\{[\s\S]*\}/)?.[0];
+    if (jsonText) {
+      const parsed = JSON.parse(jsonText);
+      return {
+        quote: typeof parsed.quote === "string" ? parsed.quote : undefined,
+        alert: typeof parsed.alert === "string" ? parsed.alert : undefined,
+        summary: typeof parsed.summary === "string" ? parsed.summary : undefined,
+        signals: Array.isArray(parsed.signals)
+          ? parsed.signals
+              .filter((signal: any) => typeof signal?.label === "string" && Number.isFinite(Number(signal?.score)))
+              .map((signal: any) => ({ label: signal.label, score: Math.max(0, Math.min(100, Math.round(Number(signal.score)))) }))
+              .slice(0, 4)
+          : undefined,
+      };
+    }
+  } catch {}
+  return { summary: text.trim() };
 };
 
 const STORAGE_KEY = "ai_chat_history_v1";
@@ -80,6 +110,9 @@ export default function ChatScreen() {
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [liveTranscript, setLiveTranscript] = useState("");
   const [showFallbackModal, setShowFallbackModal] = useState(false);
+  const [analysisStage, setAnalysisStage] = useState(0);
+  const [analysisFile, setAnalysisFile] = useState<string | null>(null);
+  const [analysisImagePreview, setAnalysisImagePreview] = useState<string | null>(null);
 
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const transcriptRef = useRef("");
@@ -119,6 +152,22 @@ export default function ChatScreen() {
     },
     []
   );
+
+  const persistChatImage = async (uri: string) => {
+    const directory = FileSystem.documentDirectory;
+    if (!directory || uri.startsWith(directory)) return uri;
+
+    const extension = uri.split("?")[0].split(".").pop()?.toLowerCase();
+    const safeExtension = extension && /^[a-z0-9]{1,5}$/.test(extension) ? extension : "jpg";
+    const destination = `${directory}chat-image-${Date.now()}.${safeExtension}`;
+    try {
+      await FileSystem.copyAsync({ from: uri, to: destination });
+      return destination;
+    } catch (error) {
+      console.warn("Unable to copy selected chat image to persistent storage:", error);
+      return uri;
+    }
+  };
 
   // 2. 註冊原生語音轉文字監聽事件
   useEffect(() => {
@@ -202,6 +251,12 @@ export default function ChatScreen() {
         style: "destructive",
         onPress: async () => {
           await AsyncStorage.removeItem(STORAGE_KEY);
+          const persistentImages = messages
+            .filter((item) => item.type === "image" && item.uri?.includes("/chat-image-"))
+            .map((item) => item.uri as string);
+          await Promise.all(
+            persistentImages.map((uri) => FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {}))
+          );
           setMessages([WELCOME_MESSAGE]);
           setSelectedImage(null);
           setMessage("");
@@ -227,7 +282,7 @@ export default function ChatScreen() {
     });
 
     if (!result.canceled) {
-      setSelectedImage(result.assets[0].uri);
+      setSelectedImage(await persistChatImage(result.assets[0].uri));
     }
   };
 
@@ -255,7 +310,6 @@ export default function ChatScreen() {
       setRecordingSeconds((prev) => prev + 1);
     }, 1000);
 
-    // 1. 原生語音辨識支援 (iOS / Android 原生開發版本)
     if (NativeSpeechModule) {
       try {
         const perm = await NativeSpeechModule.requestPermissionsAsync();
@@ -276,7 +330,6 @@ export default function ChatScreen() {
       }
     }
 
-    // 2. 網頁端 Web Speech Recognition 支援
     if (Platform.OS === "web" && typeof window !== "undefined") {
       const SpeechRec =
         (window as any).SpeechRecognition ||
@@ -311,7 +364,6 @@ export default function ChatScreen() {
       }
     }
 
-    // 3. 環境尚未掛載原生語音引擎（如純 Expo Go 環境）時的智慧對話框
     resetRecognitionState();
     setShowFallbackModal(true);
   };
@@ -341,8 +393,6 @@ export default function ChatScreen() {
       } catch {}
     }
 
-    // 檢查是否有即時辨識到的語音文字
-    // Some Android recognizers emit their final result just after stop().
     setTimeout(() => {
       const textToSend = transcriptRef.current.trim();
       stopRequestedRef.current = false;
@@ -354,7 +404,7 @@ export default function ChatScreen() {
     }, 350);
   };
 
-  // 🚀 發送即時語音轉出的文字送交後端 scam-ai-core 進行深度防詐分析
+  // 🚀 發送即時語音轉出的文字送交後端進行深度防詐分析
   const sendTranscribedText = async (transcribedText: string) => {
     if (!transcribedText.trim()) return;
 
@@ -374,15 +424,12 @@ export default function ChatScreen() {
     setIsLoading(true);
 
     try {
-      const formData = new FormData();
-      formData.append(
-        "text",
-        `[🎙️ 來電/對話語音即時轉文字內容]: "${transcribedText}"\n請扮演台灣專業防詐專家，針對上述對話語音內容進行深度詐騙意圖、情緒壓迫特徵辨識，評估詐騙風險指數 (0-100%)，並給出核心警告原因與具體防範處置建議。`
-      );
-
       const response = await fetch(BACKEND_URL, {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: `[🎙️ 來電/對話語音即時轉文字內容]: "${transcribedText}"\n請扮演台灣專業防詐專家，針對上述對話語音內容進行深度詐騙意圖、情緒壓迫特徵辨識，評估詐騙風險指數 (0-100%)，並給出核心警告原因與具體防範處置建議。`,
+        }),
       });
 
       const result = await response.json();
@@ -407,17 +454,15 @@ export default function ChatScreen() {
     }
   };
 
-  // 🚀 核心：打包 FormData 並請求後端的 scam-ai-core 分析
+  // 🚀 核心：發送文字與圖片分析
   const handleSend = async () => {
     const trimmedMessage = message.trim();
 
-    // 防呆：如果沒打字也沒選圖片，就不發送
     if (!trimmedMessage && !selectedImage) return;
 
     const timestamp = Date.now().toString();
     const newMessages: ChatMessage[] = [];
 
-    // 1. 如果有選取圖片，先將圖片塞入本地對話紀錄（靠右顯示）
     if (selectedImage) {
       newMessages.push({
         id: `user-img-${timestamp}`,
@@ -427,7 +472,6 @@ export default function ChatScreen() {
       });
     }
 
-    // 2. 如果有輸入文字，將文字塞入本地對話紀錄（靠右顯示）
     if (trimmedMessage) {
       newMessages.push({
         id: `user-txt-${timestamp}`,
@@ -437,71 +481,113 @@ export default function ChatScreen() {
       });
     }
 
-    // 更新畫面顯示使用者的訊息
-    setMessages((current) => [...current, ...newMessages]);
+    saveMessages((current) => [...current, ...newMessages]);
 
-    // 備份即將發送的圖片，並清空輸入欄與暫存狀態，進入 Loading
     const imageToSend = selectedImage;
     setMessage("");
     setSelectedImage(null);
     setIsLoading(true);
 
     try {
-      // 3. 建立符合後端 Multer 要求的 multipart/form-data
-      const formData = new FormData();
-
-      if (trimmedMessage) {
-        formData.append("text", trimmedMessage); // 對應 req.body.text
-      }
+      let analysisReport = "";
 
       if (imageToSend) {
-        if (Platform.OS === "web") {
-          const blobRes = await fetch(imageToSend);
-          const blob = await blobRes.blob();
-          formData.append("scamImage", blob, "scam_picker.jpg");
-        } else {
-          const uriParts = imageToSend.split(".");
-          const fileType = uriParts[uriParts.length - 1] || "jpeg";
+        // 📸 有圖片時：使用 FileSystem/legacy 避開 FormDataPart 錯誤
+        const uploadResult = await FileSystem.uploadAsync(BACKEND_URL, imageToSend, {
+          httpMethod: "POST",
+          uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+          fieldName: "scamImage",
+          parameters: {
+            text: `${trimmedMessage || "請分析這張聊天截圖。"}\n\n請額外分析對話中的心理操控手法。請只回傳有效 JSON，不要使用 Markdown，格式為：{"quote":"截圖中最具代表性的原句；沒有則填空字串","alert":"一句簡短風險提示","signals":[{"label":"情緒勒索","score":0},{"label":"信任施壓","score":0},{"label":"金錢要求","score":0}],"summary":"簡短說明判斷依據及建議"}。score 為 0 到 100 的風險指標；沒有證據的指標請給低分，不可臆測截圖中不存在的對話。`,
+          },
+        });
 
-          // @ts-ignore
-          formData.append("scamImage", {
-            uri: imageToSend,
-            name: `scam_picker.${fileType}`,
-            type: fileType.toLowerCase() === "png" ? "image/png" : "image/jpeg",
-          });
+        if (uploadResult.status !== 200) {
+          throw new Error(`伺服器回應異常 (${uploadResult.status})`);
+        }
+
+        const result = JSON.parse(uploadResult.body);
+        if (result.success && result.data?.analysisReport) {
+          analysisReport = result.data.analysisReport;
+        } else {
+          throw new Error(result.message || "圖片分析失敗");
+        }
+      } else {
+        // 💬 純文字時：使用 JSON 發送
+        const response = await fetch(BACKEND_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: trimmedMessage,
+          }),
+        });
+
+        const result = await response.json();
+        if (result.success && result.data?.analysisReport) {
+          analysisReport = result.data.analysisReport;
+        } else {
+          throw new Error(result.message || "文字分析失敗");
         }
       }
 
-      // 4. 發送請求至後端 index.js -> scam-ai-core.js
-      // 注意：不可手動指定 Content-Type 為 multipart/form-data，否則會遺失 boundary 導致 Multer 解析失敗
-      const response = await fetch(BACKEND_URL, {
-        method: "POST",
-        body: formData,
-      });
-
-      const result = await response.json();
-
-      // 5. 成功收到 Gemini 回傳的分析報告，塞入對話紀錄（靠左顯示）
-      if (result.success && result.data?.analysisReport) {
-        setMessages((current) => [
+      if (analysisReport) {
+        saveMessages((current) => [
           ...current,
           {
             id: `ai-${Date.now()}`,
             sender: "ai",
             type: "text",
-            text: result.data.analysisReport,
+            text: analysisReport,
+            psychologyAnalysis: Boolean(imageToSend),
           },
         ]);
-      } else {
-        throw new Error(result.message || "分析失敗");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Scam Core API Error:", error);
-      Alert.alert("分析失敗", "無法連線防詐分析伺服器，請確認網路與後端服務狀態。");
+      Alert.alert("分析失敗", error.message || "無法連線防詐分析伺服器，請確認網路與後端服務狀態。");
     } finally {
       setIsLoading(false);
     }
   };
+
+  const pickChatRecord = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.9 });
+    if (!result.canceled) {
+      setAnalysisFile(result.assets[0].uri);
+      setAnalysisStage(2);
+    }
+  };
+
+  const renderAnalysis = () => (
+    <View style={styles.analysisWrap}>
+      <Text style={styles.analysisTitle}>{analysisStage === 2 ? "分析中" : analysisStage >= 3 ? "分析結果與事件時間軸" : "分析聊天紀錄"}</Text>
+      <Text style={styles.analysisSub}>上傳資料　›　確認內容　›　開始分析</Text>
+      {analysisStage < 2 ? <View style={styles.uploadCard}>
+        <Ionicons name="cloud-upload-outline" size={48} color="#397bf2" />
+        <Text style={styles.uploadTitle}>上傳完整聊天紀錄</Text>
+        <Text style={styles.analysisSub}>目前支援聊天截圖</Text>
+        {analysisFile ? <Text style={styles.analysisSub}>{analysisFile.split("/").pop()}</Text> : null}
+        <TouchableOpacity style={styles.analysisButton} onPress={pickChatRecord}><Text style={styles.analysisButtonText}>選擇截圖</Text></TouchableOpacity>
+      </View> : analysisStage === 1 ? <View style={styles.resultCard}>
+        {analysisImagePreview ? <Image source={{ uri: analysisImagePreview }} style={styles.analysisPreview} resizeMode="contain" /> : null}
+        <Text style={styles.uploadTitle}>確認要分析這張截圖嗎？</Text>
+        <Text style={styles.analysisSub}>{analysisFile?.split("/").pop()}</Text>
+        <TouchableOpacity style={styles.analysisButton} onPress={() => setAnalysisStage(2)}><Text style={styles.analysisButtonText}>開始分析</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.changeFileButton} onPress={pickChatRecord}><Text style={styles.changeFileText}>重新選擇</Text></TouchableOpacity>
+      </View> : analysisStage === 2 ? <View style={styles.resultCard}>
+        <ActivityIndicator size="large" color="#397bf2" />
+        <Text style={styles.uploadTitle}>正在分析對話…</Text><Text style={styles.analysisSub}>整理訊息並辨識可疑事件</Text>
+        <TouchableOpacity style={styles.analysisButton} onPress={() => setAnalysisStage(3)}><Text style={styles.analysisButtonText}>查看分析結果</Text></TouchableOpacity>
+      </View> : <View style={styles.resultCard}>
+        <View style={styles.riskBanner}><Ionicons name="warning" size={24} color="#dc2626"/><Text style={styles.riskTitle}>高風險　92/100</Text></View>
+        <Text style={styles.sectionTitle}>分析摘要</Text><Text style={styles.analysisBody}>對話出現保證獲利、要求下載不明平台及催促轉帳等特徵，符合常見投資詐騙手法。</Text>
+        <Text style={styles.sectionTitle}>關鍵事件時間軸</Text>
+        {["首次接觸投資機會", "要求下載不明平台", "要求轉帳匯款", "阻止求證並要求保密"].map((event, index) => <View key={event} style={styles.eventRow}><View style={styles.eventDot}/><Text style={styles.analysisBody}>第 {42 + index * 34} 則　{event}</Text></View>)}
+        <TouchableOpacity style={styles.analysisButton} onPress={() => { setAnalysisStage(0); setAnalysisFile(null); setAnalysisImagePreview(null); }}><Text style={styles.analysisButtonText}>重新分析</Text></TouchableOpacity>
+      </View>}
+      {analysisStage >= 3 ? <Text style={styles.analysisHint}>此為介面示意結果，尚未連接聊天截圖辨識服務。請勿依此示意分數判斷真偽。</Text> : null}
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -509,7 +595,7 @@ export default function ChatScreen() {
         style={styles.screen}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Header 頂欄 */}
+        {/* Header 頂欄（已還原返回按鈕） */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
@@ -532,7 +618,7 @@ export default function ChatScreen() {
         </View>
 
         {/* 聊天對話紀錄滾動區 */}
-        <ScrollView
+        {analysisStage > 0 ? renderAnalysis() : <ScrollView
           style={styles.chatArea}
           contentContainerStyle={styles.chatContent}
           showsVerticalScrollIndicator={false}
@@ -547,9 +633,32 @@ export default function ChatScreen() {
               ]}
             >
               {item.type === "text" ? (
-                <View style={item.sender === "user" ? styles.userBubble : styles.aiBubble}>
+                <View style={item.sender === "user" ? styles.userBubble : item.psychologyAnalysis ? styles.psychBubble : styles.aiBubble}>
                   {item.sender === "user" ? (
                     <Text style={styles.userBubbleText}>{item.text}</Text>
+                  ) : item.psychologyAnalysis ? (
+                    <View style={styles.psychCard}>
+                      <View style={styles.psychHeadingRow}>
+                        <Text style={styles.psychTitle}>AI 心理操控分析</Text>
+                        <Ionicons name="pulse-outline" size={20} color="#e5e7eb" />
+                      </View>
+                      <Text style={styles.psychBrand}>AI-Shield · 對話分析</Text>
+                      {(() => {
+                        const report = parsePsychologyReport(item.text);
+                        return <>
+                          {report.quote ? <Text style={styles.psychQuote}>「{report.quote}」</Text> : null}
+                          {report.alert ? <View style={styles.psychAlert}><Ionicons name="warning-outline" size={15} color="#fb7185" /><Text style={styles.psychAlertText}>{report.alert}</Text></View> : null}
+                          {report.signals?.length ? report.signals.map((signal, index) => (
+                            <View key={`${signal.label}-${index}`} style={styles.signalRow}>
+                              <View style={styles.signalLabelRow}><Text style={styles.signalLabel}>{signal.label}</Text><Text style={styles.signalScore}>{signal.score}%</Text></View>
+                              <View style={styles.signalTrack}><View style={[styles.signalFill, { width: `${signal.score}%` }]} /></View>
+                            </View>
+                          )) : null}
+                          {report.summary ? <Text style={styles.psychSummary}>{report.summary}</Text> : null}
+                          <Text style={styles.psychFootnote}>以上指標為 AI 對話線索分析，不能直接視為詐騙機率。</Text>
+                        </>;
+                      })()}
+                    </View>
                   ) : (
                     <Markdown style={{
                         body: { color: "#111827", fontSize: 16 },
@@ -588,9 +697,9 @@ export default function ChatScreen() {
               </View>
             </View>
           )}
-        </ScrollView>
+        </ScrollView>}
 
-        {/* 挑選圖片後的預覽小框（位於輸入欄上方，可隨時取消） */}
+        {/* 挑選圖片後的預覽小框 */}
         {selectedImage && (
           <View style={styles.previewContainer}>
             <Image source={{ uri: selectedImage }} style={styles.previewImage} />
@@ -623,7 +732,7 @@ export default function ChatScreen() {
             />
           </View>
 
-          {/* 🎙️ 即時語音轉文字按鈕（按住或點擊說話） */}
+          {/* 🎙️ 即時語音轉文字按鈕 */}
           <TouchableOpacity
             style={[styles.toolButton, isRecording && styles.toolButtonRecording]}
             onPress={() => {
@@ -685,7 +794,7 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {/* 🎙️ 語音轉文字輔助與範例彈窗（支援鍵盤語音聽寫與常見通話詐騙話術） */}
+        {/* 🎙️ 語音轉文字輔助與範例彈窗 */}
         {showFallbackModal && (
           <Modal visible={showFallbackModal} transparent animationType="fade">
             <TouchableOpacity
@@ -734,6 +843,37 @@ export default function ChatScreen() {
 }
 
 const styles = StyleSheet.create({
+  psychCard: { width: "100%", backgroundColor: "#050505", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#1f1f1f" },
+  psychBubble: { width: "94%", maxWidth: "94%", padding: 0, backgroundColor: "transparent", borderWidth: 0 },
+  psychHeadingRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  psychTitle: { color: "#f8fafc", fontSize: 16, fontWeight: "800" },
+  psychBrand: { color: "#a1a1aa", fontSize: 11, marginTop: 3, marginBottom: 16 },
+  psychQuote: { color: "#f4f4f5", fontSize: 14, lineHeight: 21, marginBottom: 16 },
+  psychAlert: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 13 },
+  psychAlertText: { color: "#d4d4d8", fontSize: 12, fontWeight: "700", flex: 1 },
+  signalRow: { marginBottom: 10 },
+  signalLabelRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },
+  signalLabel: { color: "#d4d4d8", fontSize: 12 },
+  signalScore: { color: "#f4f4f5", fontSize: 12, fontWeight: "600" },
+  signalTrack: { height: 7, backgroundColor: "#27272a", borderRadius: 5, overflow: "hidden" },
+  signalFill: { height: "100%", backgroundColor: "#ef4444", borderRadius: 5 },
+  psychSummary: { color: "#d4d4d8", fontSize: 12, lineHeight: 18, marginTop: 4 },
+  psychFootnote: { color: "#a1a1aa", fontSize: 10, lineHeight: 15, marginTop: 12 },
+  analysisWrap: { flex: 1, backgroundColor: "#f8fbff", padding: 18 },
+  analysisTitle: { color: "#111827", fontSize: 20, fontWeight: "800", textAlign: "center", marginBottom: 8 },
+  analysisSub: { color: "#64748b", fontSize: 12, textAlign: "center", marginBottom: 18 },stepsRow: { flexDirection: "row", justifyContent: "space-around", marginBottom: 24 },stepItem: { alignItems: "center", gap: 5 }, stepDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: "#cbd5e1", alignItems: "center", justifyContent: "center" },stepActive: { backgroundColor: "#397bf2" }, stepNum: { color: "white", fontWeight: "700" }, stepLabel: { color: "#64748b", fontSize: 11 },analysisPreview: { width: "100%", height: 220, marginBottom: 12, backgroundColor: "#f1f5f9", borderRadius: 12 }, changeFileButton: { alignItems: "center", padding: 12 }, changeFileText: { color: "#397bf2", fontWeight: "700" },
+  uploadCard: { flex: 1, maxHeight: 330, borderRadius: 18, borderWidth: 1, borderStyle: "dashed", borderColor: "#cbd5e1", backgroundColor: "white", alignItems: "center", justifyContent: "center", padding: 22, gap: 12 },
+  uploadTitle: { color: "#111827", fontSize: 17, fontWeight: "800", textAlign: "center" },
+  analysisButton: { backgroundColor: "#397bf2", paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12, marginTop: 14, alignItems: "center" },
+  analysisButtonText: { color: "white", fontWeight: "700" },
+  resultCard: { backgroundColor: "white", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#e5e7eb", alignItems: "stretch" },
+  riskBanner: { backgroundColor: "#fee2e2", borderRadius: 12, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 },
+  riskTitle: { color: "#b91c1c", fontWeight: "800", fontSize: 16 },
+  sectionTitle: { color: "#111827", fontWeight: "800", fontSize: 15, marginTop: 12, marginBottom: 5 },
+  analysisBody: { color: "#334155", fontSize: 13, lineHeight: 20 },
+  eventRow: { borderLeftWidth: 2, borderLeftColor: "#f87171", paddingLeft: 12, paddingVertical: 8 },
+  eventDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#ef4444", position: "absolute", left: -5, top: 14 },
+  analysisHint: { color: "#64748b", fontSize: 11, lineHeight: 16, marginTop: 12 },
   safeArea: { flex: 1, backgroundColor: "#ffffff" },
   screen: { flex: 1, backgroundColor: "#ffffff" },
   header: {
@@ -757,7 +897,7 @@ const styles = StyleSheet.create({
   rowUser: { justifyContent: "flex-end" },
   rowAI: { justifyContent: "flex-start" },
 
-  // 使用者對話泡泡（藍底白字）
+  // 使用者對話泡泡
   userBubble: {
     maxWidth: "78%",
     borderRadius: 16,
@@ -768,7 +908,7 @@ const styles = StyleSheet.create({
   },
   userBubbleText: { color: "#ffffff", fontSize: 14, lineHeight: 20 },
 
-  // AI 專家對話泡泡（白底黑字，帶細灰色邊框）
+  // AI 專家對話泡泡
   aiBubble: {
     maxWidth: "78%",
     borderRadius: 16,
@@ -929,7 +1069,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // 🎙️ 語音轉文字彈窗樣式
+  // 🎙️️ 語音轉文字彈窗樣式
   fallbackOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.45)",

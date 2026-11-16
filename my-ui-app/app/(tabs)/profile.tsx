@@ -17,6 +17,7 @@ import {
 import { logout } from "@/utils/auth";
 import { FONT_SIZE_OPTIONS, useFontSize } from "@/utils/fontSize";
 import { DEFAULT_PROFILE, getSavedProfile, syncProfileWithBackend } from "@/utils/profile";
+import { APP_ROUTES } from "@/constants/app-routes";
 
 type MenuRow = {
   badge?: string;
@@ -104,7 +105,7 @@ export default function ProfileScreen() {
       description: "查看曾經提交的通報內容",
       icon: "newspaper-outline",
       label: "通報紀錄",
-      onPress: () => router.push("/(tabs)/reports" as never),
+      onPress: () => router.navigate(APP_ROUTES.reportHistory as never),
     },
     {
       badge: "VIP",
