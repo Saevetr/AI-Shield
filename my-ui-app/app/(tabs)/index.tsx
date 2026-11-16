@@ -11,6 +11,7 @@ import {
 } from "react-native";
 
 import { getSavedProfile } from "@/utils/profile";
+import { APP_ROUTES } from "@/constants/app-routes";
 
 import { homeStyles as styles } from "../../styles/tabs.styles";
 
@@ -242,7 +243,7 @@ export default function HomeScreen() {
 
         <TouchableOpacity
           style={styles.knowledgeCard}
-          onPress={() => router.push("/(tabs)/explore" as never)}
+          onPress={() => router.navigate(APP_ROUTES.antiFraudInfo as never)}
           activeOpacity={0.82}
         >
           <View style={styles.knowledgeIconCircle}>
