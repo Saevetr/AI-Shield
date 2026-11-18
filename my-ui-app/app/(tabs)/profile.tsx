@@ -57,9 +57,11 @@ export default function ProfileScreen() {
         // 3. 取得該使用者個人的真實黑名單筆數
         try {
           const uid = dbData?.userId || localData?.userId || "";
-          const fetchUrl = uid
-            ? `${API_URL}/api/check/blacklist?userId=${encodeURIComponent(uid)}`
-            : `${API_URL}/api/check/blacklist`;
+          if (!uid) {
+            if (isMounted) setBlacklistCount("--");
+            return;
+          }
+          const fetchUrl = `${API_URL}/api/check/blacklist?userId=${encodeURIComponent(uid)}`;
           const res = await fetch(fetchUrl);
           const data = await res.json();
           if (isMounted && data.success && Array.isArray(data.items)) {

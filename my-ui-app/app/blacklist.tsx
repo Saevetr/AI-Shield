@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Text, TextInput } from "@/components/app-text";
-import { router } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -77,6 +77,7 @@ export default function BlacklistScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [items, setItems] = useState<BlacklistItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const requestId = useRef(0);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [newType, setNewType] = useState<BlacklistType>("電話");
@@ -85,14 +86,18 @@ export default function BlacklistScreen() {
   const [saving, setSaving] = useState(false);
 
   const loadBlacklist = useCallback(async () => {
+    const id = ++requestId.current;
     try {
       setLoading(true);
+      setItems([]);
       const currentUser = await getCurrentUser();
       const currentUserId = currentUser?.user_id || currentUser?.userId || "";
+      if (id !== requestId.current) return;
+      if (!currentUserId) throw new Error("請重新登入後查看個人黑名單。");
 
       let url = `${API_BASE}/api/check/blacklist?`;
       const queryParts = [];
-      if (currentUserId) queryParts.push(`userId=${encodeURIComponent(currentUserId)}`);
+      queryParts.push(`userId=${encodeURIComponent(currentUserId)}`);
       if (activeTab !== "全部") queryParts.push(`type=${encodeURIComponent(activeTab)}`);
       url += queryParts.join("&");
 
@@ -103,6 +108,7 @@ export default function BlacklistScreen() {
       }
 
       const data = await res.json();
+      if (!data.success) throw new Error(data.message || "黑名單讀取失敗");
 
       const nextItems: BlacklistItem[] = Array.isArray(data.items)
         ? data.items
@@ -110,18 +116,20 @@ export default function BlacklistScreen() {
         ? data.data
         : [];
 
-      setItems(nextItems);
-    } catch (error) {
+      if (id === requestId.current) setItems(nextItems);
+    } catch (error: any) {
+      if (id !== requestId.current) return;
       console.log("讀取黑名單失敗：", error);
-      Alert.alert("讀取失敗", "無法讀取黑名單，請確認後端已啟動。");
+      Alert.alert("讀取失敗", error?.message || "無法讀取黑名單，請稍後重試。");
     } finally {
-      setLoading(false);
+      if (id === requestId.current) setLoading(false);
     }
   }, [activeTab]);
 
-  useEffect(() => {
-    loadBlacklist();
-  }, [loadBlacklist]);
+  useFocusEffect(useCallback(() => {
+    void loadBlacklist();
+    return () => { requestId.current += 1; };
+  }, [loadBlacklist]));
 
   const visibleItems = useMemo(() => {
     if (activeTab === "全部") {
@@ -151,6 +159,7 @@ export default function BlacklistScreen() {
       setSaving(true);
       const currentUser = await getCurrentUser();
       const currentUserId = currentUser?.user_id || currentUser?.userId || null;
+      if (!currentUserId) throw new Error("請重新登入後再加入黑名單。");
 
       const res = await fetch(`${API_BASE}/api/check/blacklist`, {
         method: "POST",
@@ -187,9 +196,8 @@ export default function BlacklistScreen() {
     try {
       const currentUser = await getCurrentUser();
       const currentUserId = currentUser?.user_id || currentUser?.userId || "";
-      const deleteUrl = currentUserId
-        ? `${API_BASE}/api/check/blacklist/${item.id}?userId=${encodeURIComponent(currentUserId)}`
-        : `${API_BASE}/api/check/blacklist/${item.id}`;
+      if (!currentUserId) throw new Error("請重新登入後管理個人黑名單。");
+      const deleteUrl = `${API_BASE}/api/check/blacklist/${item.id}?userId=${encodeURIComponent(currentUserId)}`;
 
       const res = await fetch(deleteUrl, {
         method: "DELETE",

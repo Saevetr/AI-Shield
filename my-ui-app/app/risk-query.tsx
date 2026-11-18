@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Text, TextInput } from "@/components/app-text";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -122,6 +122,7 @@ export default function RiskQueryScreen() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [records, setRecords] = useState<QueryResult[]>([]);
+  const reportInFlight = useRef(false);
 
   useEffect(() => {
     const loadRecords = async () => {
@@ -187,10 +188,11 @@ export default function RiskQueryScreen() {
         targetMode === "phone"
           ? { phone: normalizedValue }
           : { lineId: normalizedValue };
+      const currentUser = await getCurrentUser();
       const response = await fetch(`${API_BASE}/api/check/${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, userId: currentUser?.user_id || currentUser?.userId || null }),
         signal: controller.signal,
       });
       const rawText = await response.text();
@@ -279,6 +281,10 @@ export default function RiskQueryScreen() {
     try {
       const currentUser = await getCurrentUser();
       const currentUserId = currentUser?.user_id || currentUser?.userId || null;
+      if (!currentUserId) {
+        Alert.alert("請重新登入", "登入後才能加入個人黑名單。");
+        return;
+      }
 
       const response = await fetch(`${API_BASE}/api/check/blacklist`, {
         method: "POST",
@@ -303,34 +309,57 @@ export default function RiskQueryScreen() {
   };
 
   const submitReport = async () => {
-    if (!result) return;
+    if (!result || reportInFlight.current) return;
+    reportInFlight.current = true;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
       const currentUser = await getCurrentUser();
       const currentUserId = currentUser?.user_id || currentUser?.userId || null;
+      if (!currentUserId) {
+        Alert.alert("請重新登入", "無法取得會員編號，通報尚未送出。", [
+          { text: "取消", style: "cancel" },
+          { text: "前往登入", onPress: () => router.push("/login") },
+        ]);
+        return;
+      }
 
       const response = await fetch(`${API_BASE}/api/check/report`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           type: result.kind === "line" ? "LINE" : "PHONE",
           value: result.value,
-          reason: result.message,
+          reason: "使用者從風險查詢結果送出疑似詐騙通報，待後續查核。",
           userId: currentUserId,
         }),
       });
       const data = await response.json().catch(() => ({}));
 
-      if (!response.ok || data.success === false) {
+      if (!response.ok || data.success !== true) {
         throw new Error(data.message || "無法送出通報");
+      }
+      if (data.data?.id === undefined || data.data?.id === null || String(data.data.id).trim() === "") {
+        throw new Error("伺服器未回傳已儲存的通報紀錄編號，無法確認通報結果。請先更新後端服務，再查看通報紀錄。");
       }
 
       Alert.alert(
-        "通報成功",
-        "已成功加入個人通報紀錄！感謝你的回報，我們會持續更新風險資料。"
+        data.duplicate ? "已通報" : "通報成功",
+        data.duplicate ? "此項目已在你的個人通報紀錄中。" : "已送出通報，等待後續查核。",
+        [
+          { text: "關閉", style: "cancel" },
+          { text: "查看紀錄", onPress: () => router.push("/(tabs)/reports") },
+        ]
       );
     } catch (error: any) {
-      Alert.alert("通報失敗", String(error?.message || error));
+      Alert.alert("通報未確認", error?.name === "AbortError"
+        ? "伺服器回應逾時，請先查看通報紀錄再決定是否重試。"
+        : String(error?.message || error));
+    } finally {
+      clearTimeout(timeoutId);
+      reportInFlight.current = false;
     }
   };
 
