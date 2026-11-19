@@ -1,9 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Text } from "@/components/app-text";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -27,7 +29,7 @@ type ReportItem = {
   type: "電話" | "LINE ID";
   reason: string;
   status: ReportStatus;
-  risk: ReportRisk;
+  risk: ReportRisk | null;
   date: string;
 };
 
@@ -95,40 +97,71 @@ export default function ReportsScreen() {
   const [activeFilter, setActiveFilter] = useState<Filter>("全部");
   const [reports, setReports] = useState<ReportItem[]>(defaultReports);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [needsLogin, setNeedsLogin] = useState(false);
+  const requestId = useRef(0);
+  const activeRequest = useRef<AbortController | null>(null);
 
   const loadReports = useCallback(async () => {
+    const id = ++requestId.current;
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    setLoading(true);
+    setError("");
+    setNeedsLogin(false);
+    setReports([]);
+
     try {
-      setLoading(true);
       const user = await getCurrentUser();
       const userId = user?.user_id || user?.userId || "";
-      const url = userId
-        ? `${API_BASE}/api/check/reports?userId=${encodeURIComponent(userId)}`
-        : `${API_BASE}/api/check/reports`;
-
-      const res = await fetch(url);
-      const data = await res.json();
-      if (res.ok && data.success && Array.isArray(data.data)) {
-        const fetchedReports: ReportItem[] = data.data.map((r: any) => ({
-          id: String(r.id),
-          target: String(r.target || ""),
-          type: (r.type === "PHONE" ? "電話" : "LINE ID") as "電話" | "LINE ID",
-          reason: String(r.reason || "使用者通報"),
-          status: (r.status || "已確認") as ReportStatus,
-          risk: (r.risk || "high") as ReportRisk,
-          date: r.created_at ? new Date(r.created_at).toLocaleDateString("zh-TW") : "近期",
-        }));
-        setReports(fetchedReports);
+      if (id !== requestId.current) return;
+      if (!userId) {
+        setNeedsLogin(true);
+        throw new Error("登入資料已失效，請重新登入後查看通報紀錄。");
       }
-    } catch {
-      // keep fallback
+
+      const res = await fetch(
+        `${API_BASE}/api/check/reports?userId=${encodeURIComponent(userId)}`,
+        { signal: controller.signal }
+      );
+      const data = await res.json().catch(() => null);
+      if (id !== requestId.current) return;
+      if (res.status === 401) setNeedsLogin(true);
+      if (!res.ok || data?.success !== true || !Array.isArray(data.data)) {
+        throw new Error(data?.message || `無法讀取通報紀錄（HTTP ${res.status}），請稍後重試。`);
+      }
+
+      const fetchedReports: ReportItem[] = data.data.map((r: any) => ({
+        id: String(r.id),
+        target: String(r.target || ""),
+        type: String(r.type).toUpperCase() === "PHONE" ? "電話" : "LINE ID",
+        reason: String(r.reason || "使用者通報").replace(/^REPORT: /, ""),
+        status: ["審核中", "已確認", "已退回"].includes(r.status) ? r.status : "審核中",
+        risk: ["high", "medium", "low"].includes(r.risk) ? r.risk : null,
+        date: r.created_at ? new Date(r.created_at).toLocaleDateString("zh-TW") : "近期",
+      }));
+      setReports(fetchedReports);
+    } catch (loadError: any) {
+      if (id === requestId.current) {
+        setError(loadError?.name === "AbortError"
+          ? "讀取逾時，請確認網路後重試。"
+          : String(loadError?.message || "通報紀錄讀取失敗，請稍後重試。"));
+      }
     } finally {
-      setLoading(false);
+      clearTimeout(timeoutId);
+      if (id === requestId.current) setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    loadReports();
-  }, [loadReports]);
+  useFocusEffect(useCallback(() => {
+    void loadReports();
+    return () => {
+      requestId.current += 1;
+      activeRequest.current?.abort();
+    };
+  }, [loadReports]));
 
   const visibleReports = useMemo(() => {
     if (activeFilter === "全部") {
@@ -161,6 +194,7 @@ export default function ReportsScreen() {
         style={styles.container}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={loadReports} />}
       >
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
@@ -213,11 +247,31 @@ export default function ReportsScreen() {
           <Text style={styles.sectionHint}>{visibleReports.length} 筆</Text>
         </View>
 
-        {visibleReports.length > 0 ? (
+        {loading ? (
+          <View style={styles.emptyCard}>
+            <ActivityIndicator size="large" color="#397bf2" />
+            <Text style={styles.emptyTitle}>正在讀取通報紀錄</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.emptyCard}>
+            <Ionicons name="alert-circle-outline" size={38} color="#b84b55" />
+            <Text style={styles.emptyTitle}>暫時無法顯示紀錄</Text>
+            <Text style={styles.emptyText}>{error}</Text>
+            <TouchableOpacity
+              accessibilityRole="button"
+              style={[styles.filterButton, styles.filterButtonActive]}
+              onPress={() => needsLogin ? router.push("/login") : void loadReports()}
+            >
+              <Text style={[styles.filterText, styles.filterTextActive]}>
+                {needsLogin ? "重新登入" : "重新讀取"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : visibleReports.length > 0 ? (
           <View style={styles.reportList}>
             {visibleReports.map((report) => {
               const statusStyle = statusStyleMap[report.status];
-              const riskStyle = riskStyleMap[report.risk];
+              const riskStyle = report.risk ? riskStyleMap[report.risk] : null;
               const typeIcon = report.type === "電話" ? "call-outline" : "chatbubble-ellipses-outline";
 
               return (
@@ -244,12 +298,12 @@ export default function ReportsScreen() {
                     <View style={styles.footerTag}>
                       <Text style={styles.footerTagText}>類型：{report.type}</Text>
                     </View>
-                    <View style={[styles.riskTag, { borderColor: riskStyle.color }]}>
+                    {riskStyle && <View style={[styles.riskTag, { borderColor: riskStyle.color }]}>
                       <View style={[styles.riskDot, { backgroundColor: riskStyle.color }]} />
                       <Text style={[styles.riskText, { color: riskStyle.color }]}>
                         {riskStyle.label}
                       </Text>
-                    </View>
+                    </View>}
                   </View>
                 </TouchableOpacity>
               );
@@ -258,8 +312,8 @@ export default function ReportsScreen() {
         ) : (
           <View style={styles.emptyCard}>
             <Ionicons name="document-text-outline" size={38} color="#b8c5d8" />
-            <Text style={styles.emptyTitle}>尚無個人通報紀錄</Text>
-            <Text style={styles.emptyText}>遇到可疑電話或 LINE 帳號時，可從查詢結果頁點擊「我要通報」，共同守護防詐安全網。</Text>
+            <Text style={styles.emptyTitle}>{activeFilter === "全部" ? "尚無個人通報紀錄" : `尚無${activeFilter}的通報`}</Text>
+            <Text style={styles.emptyText}>{activeFilter === "全部" ? "尚未送出個人通報。" : "目前沒有符合此狀態的紀錄。"}</Text>
           </View>
         )}
       </ScrollView>

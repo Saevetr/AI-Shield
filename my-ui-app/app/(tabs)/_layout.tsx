@@ -2,11 +2,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
 import { Text } from "@/components/app-text";
-import { View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { HapticTab } from "@/components/haptic-tab";
+import { getFontScale, useFontSize } from "@/utils/fontSize";
 
 import { tabLayoutStyles as styles } from "../../styles/tabs.styles";
+
+export const unstable_settings = {
+  anchor: "index",
+};
 
 const tabConfig = {
   index: { label: "首頁", icon: "home-outline" },
@@ -26,35 +32,48 @@ function TabIcon({
   const item = tabConfig[name];
 
   return (
-    <View style={styles.tabIconWrap}>
-      <View style={[styles.iconBox, focused && styles.iconBoxActive]}>
-        <Ionicons
-          name={item.icon as keyof typeof Ionicons.glyphMap}
-          size={22}
-          color={focused ? "#397bf2" : "#4b5563"}
-        />
-      </View>
-      <Text
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.7}
-        style={[styles.tabLabel, focused && styles.tabLabelActive]}
-      >
-        {item.label}
-      </Text>
+    <View
+      style={[styles.iconBox, focused && styles.iconBoxActive]}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
+      <Ionicons
+        name={item.icon as keyof typeof Ionicons.glyphMap}
+        size={24}
+        color={focused ? "#397bf2" : "#4b5563"}
+      />
     </View>
   );
 }
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  const { fontSize } = useFontSize();
+  const labelHeight = Math.ceil(
+    Math.round(styles.tabLabel.lineHeight * getFontScale(fontSize)) * Math.max(1, fontScale)
+  );
+  const bottomPadding = Math.min(insets.bottom, 12);
+  const contentHeight = styles.iconBox.height + styles.tabLabel.marginTop + labelHeight;
+
   return (
     <Tabs
-      initialRouteName="index"
+      backBehavior="initialRoute"
       screenOptions={{
         headerShown: false,
-        tabBarButton: HapticTab,
-        tabBarShowLabel: false,
-        tabBarStyle: styles.tabBar,
+        tabBarButton: (props) => <HapticTab {...props} style={[props.style, styles.tabButton]} />,
+        tabBarShowLabel: true,
+        tabBarLabelPosition: "below-icon",
+        tabBarLabel: ({ focused, children }) => (
+          <Text numberOfLines={1} style={[styles.tabLabel, focused && styles.tabLabelActive]}>
+            {children}
+          </Text>
+        ),
+        tabBarIconStyle: styles.tabIcon,
+        tabBarStyle: [styles.tabBar, {
+          height: contentHeight + styles.tabBar.paddingTop + bottomPadding,
+          paddingBottom: bottomPadding,
+        }],
         tabBarItemStyle: styles.tabItem,
       }}
     >
@@ -62,6 +81,7 @@ export default function TabLayout() {
         name="chat"
         options={{
           title: tabConfig.chat.label,
+          tabBarAccessibilityLabel: tabConfig.chat.label,
           tabBarIcon: ({ focused }) => <TabIcon name="chat" focused={focused} />,
         }}
       />
@@ -69,6 +89,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: tabConfig.index.label,
+          tabBarAccessibilityLabel: tabConfig.index.label,
           tabBarIcon: ({ focused }) => <TabIcon name="index" focused={focused} />,
         }}
       />
@@ -77,7 +98,8 @@ export default function TabLayout() {
         options={{
           title: tabConfig.explore.label,
           tabBarIcon: ({ focused }) => <TabIcon name="explore" focused={focused} />,
-          href: null,
+          tabBarItemStyle: styles.hiddenTabItem,
+          tabBarButton: () => null,
         }}
       />
       <Tabs.Screen
@@ -85,13 +107,15 @@ export default function TabLayout() {
         options={{
           title: tabConfig.reports.label,
           tabBarIcon: ({ focused }) => <TabIcon name="reports" focused={focused} />,
-          href: null,
+          tabBarItemStyle: styles.hiddenTabItem,
+          tabBarButton: () => null,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: tabConfig.profile.label,
+          tabBarAccessibilityLabel: tabConfig.profile.label,
           tabBarIcon: ({ focused }) => <TabIcon name="profile" focused={focused} />,
         }}
       />
