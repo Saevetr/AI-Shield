@@ -1,10 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Text } from "@/components/app-text";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -17,19 +16,11 @@ import { getCurrentUser } from "@/utils/auth";
 const API_BASE =
   process.env.EXPO_PUBLIC_API_URL || "https://ai-shield-m68d.onrender.com";
 
-const filters = ["全部", "審核中", "已確認", "已退回"] as const;
-
-type Filter = (typeof filters)[number];
-type ReportStatus = Exclude<Filter, "全部">;
-type ReportRisk = "high" | "medium" | "low";
-
 type ReportItem = {
   id: string;
   target: string;
   type: "電話" | "LINE ID";
   reason: string;
-  status: ReportStatus;
-  risk: ReportRisk | null;
   date: string;
 };
 
@@ -51,51 +42,15 @@ const formatReportTarget = (report: ReportItem) => {
   return report.target;
 };
 
-const defaultReports: ReportItem[] = [];
-
-const statusStyleMap: Record<
-  ReportStatus,
-  {
-    backgroundColor: string;
-    color: string;
-    icon: keyof typeof Ionicons.glyphMap;
-  }
-> = {
-  審核中: {
-    backgroundColor: "#fff4d8",
-    color: "#f6a21a",
-    icon: "time-outline",
-  },
-  已確認: {
-    backgroundColor: "#e6f7ee",
-    color: "#12a83b",
-    icon: "checkmark-circle-outline",
-  },
-  已退回: {
-    backgroundColor: "#f1f4f8",
-    color: "#7b8794",
-    icon: "return-down-back-outline",
-  },
-};
-
-const riskStyleMap: Record<ReportRisk, { color: string; label: string }> = {
-  high: {
-    color: "#dc2f38",
-    label: "高風險",
-  },
-  medium: {
-    color: "#f6a21a",
-    label: "中風險",
-  },
-  low: {
-    color: "#12a83b",
-    label: "低風險",
-  },
-};
+function formatReportReason(reason?: string) {
+  const text = (reason || "使用者通報").replace(/^REPORT: /, "");
+  return text === "使用者從風險查詢結果送出疑似詐騙通報，待後續查核。"
+    ? "從風險查詢結果送出的疑似詐騙通報。"
+    : text;
+}
 
 export default function ReportsScreen() {
-  const [activeFilter, setActiveFilter] = useState<Filter>("全部");
-  const [reports, setReports] = useState<ReportItem[]>(defaultReports);
+  const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [needsLogin, setNeedsLogin] = useState(false);
@@ -137,9 +92,7 @@ export default function ReportsScreen() {
         id: String(r.id),
         target: String(r.target || ""),
         type: String(r.type).toUpperCase() === "PHONE" ? "電話" : "LINE ID",
-        reason: String(r.reason || "使用者通報").replace(/^REPORT: /, ""),
-        status: ["審核中", "已確認", "已退回"].includes(r.status) ? r.status : "審核中",
-        risk: ["high", "medium", "low"].includes(r.risk) ? r.risk : null,
+        reason: formatReportReason(String(r.reason || "")),
         date: r.created_at ? new Date(r.created_at).toLocaleDateString("zh-TW") : "近期",
       }));
       setReports(fetchedReports);
@@ -163,27 +116,18 @@ export default function ReportsScreen() {
     };
   }, [loadReports]));
 
-  const visibleReports = useMemo(() => {
-    if (activeFilter === "全部") {
-      return reports;
-    }
-
-    return reports.filter((report) => report.status === activeFilter);
-  }, [activeFilter, reports]);
-
-  const confirmedCount = reports.filter((report) => report.status === "已確認").length;
-  const pendingCount = reports.filter((report) => report.status === "審核中").length;
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerCopy}>
           <Text style={styles.headerTitle}>通報紀錄</Text>
-          <Text style={styles.headerSubtitle}>查看你送出的可疑號碼與帳號回報</Text>
+          <Text style={styles.headerSubtitle}>已通報不代表該電話或帳號已證實為詐騙。</Text>
         </View>
         <TouchableOpacity
           style={styles.headerAction}
-          onPress={() => Alert.alert("新增通報", "可以從電話查詢或 LINE 查詢結果頁送出通報。")}
+          accessibilityRole="button"
+          accessibilityLabel="新增通報"
+          onPress={() => router.push("/risk-query")}
           activeOpacity={0.78}
         >
           <Ionicons name="add" size={24} color="#ffffff" />
@@ -196,55 +140,9 @@ export default function ReportsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={loadReports} />}
       >
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryNumber}>{reports.length}</Text>
-            <Text style={styles.summaryLabel}>總通報</Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryNumber}>{confirmedCount}</Text>
-            <Text style={styles.summaryLabel}>已確認</Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryNumber}>{pendingCount}</Text>
-            <Text style={styles.summaryLabel}>審核中</Text>
-          </View>
-        </View>
-
-        <View style={styles.noticeCard}>
-          <Ionicons name="shield-checkmark-outline" size={24} color="#397bf2" />
-          <View style={styles.noticeTextGroup}>
-            <Text style={styles.noticeTitle}>通報會協助更新風險資料</Text>
-            <Text style={styles.noticeText}>越完整的截圖、對話與轉帳資訊，越能協助判斷風險等級。</Text>
-          </View>
-        </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-        >
-          {filters.map((filter) => {
-            const isActive = activeFilter === filter;
-
-            return (
-              <TouchableOpacity
-                key={filter}
-                style={[styles.filterButton, isActive && styles.filterButtonActive]}
-                onPress={() => setActiveFilter(filter)}
-                activeOpacity={0.78}
-              >
-                <Text style={[styles.filterText, isActive && styles.filterTextActive]}>
-                  {filter}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>最近通報</Text>
-          <Text style={styles.sectionHint}>{visibleReports.length} 筆</Text>
+          {!loading && !error && <Text style={styles.sectionHint}>{reports.length} 筆</Text>}
         </View>
 
         {loading ? (
@@ -259,23 +157,21 @@ export default function ReportsScreen() {
             <Text style={styles.emptyText}>{error}</Text>
             <TouchableOpacity
               accessibilityRole="button"
-              style={[styles.filterButton, styles.filterButtonActive]}
+              style={styles.retryButton}
               onPress={() => needsLogin ? router.push("/login") : void loadReports()}
             >
-              <Text style={[styles.filterText, styles.filterTextActive]}>
+              <Text style={styles.retryText}>
                 {needsLogin ? "重新登入" : "重新讀取"}
               </Text>
             </TouchableOpacity>
           </View>
-        ) : visibleReports.length > 0 ? (
+        ) : reports.length > 0 ? (
           <View style={styles.reportList}>
-            {visibleReports.map((report) => {
-              const statusStyle = statusStyleMap[report.status];
-              const riskStyle = report.risk ? riskStyleMap[report.risk] : null;
+            {reports.map((report) => {
               const typeIcon = report.type === "電話" ? "call-outline" : "chatbubble-ellipses-outline";
 
               return (
-                <TouchableOpacity key={report.id} style={styles.reportCard} activeOpacity={0.82}>
+                <View key={report.id} style={styles.reportCard}>
                   <View style={styles.reportTopRow}>
                     <View style={styles.typeIconBox}>
                       <Ionicons name={typeIcon} size={22} color="#397bf2" />
@@ -284,11 +180,9 @@ export default function ReportsScreen() {
                       <Text style={styles.reportTarget}>{formatReportTarget(report)}</Text>
                       <Text style={styles.reportDate}>{report.date}</Text>
                     </View>
-                    <View style={[styles.statusPill, { backgroundColor: statusStyle.backgroundColor }]}>
-                      <Ionicons name={statusStyle.icon} size={13} color={statusStyle.color} />
-                      <Text style={[styles.statusText, { color: statusStyle.color }]}>
-                        {report.status}
-                      </Text>
+                    <View style={styles.statusPill}>
+                      <Ionicons name="document-text-outline" size={14} color="#375778" />
+                      <Text style={styles.statusText}>已通報</Text>
                     </View>
                   </View>
 
@@ -298,22 +192,16 @@ export default function ReportsScreen() {
                     <View style={styles.footerTag}>
                       <Text style={styles.footerTagText}>類型：{report.type}</Text>
                     </View>
-                    {riskStyle && <View style={[styles.riskTag, { borderColor: riskStyle.color }]}>
-                      <View style={[styles.riskDot, { backgroundColor: riskStyle.color }]} />
-                      <Text style={[styles.riskText, { color: riskStyle.color }]}>
-                        {riskStyle.label}
-                      </Text>
-                    </View>}
                   </View>
-                </TouchableOpacity>
+                </View>
               );
             })}
           </View>
         ) : (
           <View style={styles.emptyCard}>
             <Ionicons name="document-text-outline" size={38} color="#b8c5d8" />
-            <Text style={styles.emptyTitle}>{activeFilter === "全部" ? "尚無個人通報紀錄" : `尚無${activeFilter}的通報`}</Text>
-            <Text style={styles.emptyText}>{activeFilter === "全部" ? "尚未送出個人通報。" : "目前沒有符合此狀態的紀錄。"}</Text>
+            <Text style={styles.emptyTitle}>尚無個人通報紀錄</Text>
+            <Text style={styles.emptyText}>送出通報後，紀錄會顯示在這裡。</Text>
           </View>
         )}
       </ScrollView>
@@ -336,6 +224,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#eef2f7",
   },
+  headerCopy: {
+    flex: 1,
+    paddingRight: 12,
+    paddingVertical: 8,
+  },
   headerTitle: {
     color: "#111827",
     fontSize: 22,
@@ -343,7 +236,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   headerSubtitle: {
-    color: "#8aa4c5",
+    color: "#526780",
     fontSize: 12,
     fontWeight: "700",
   },
@@ -364,76 +257,18 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 84,
   },
-  summaryRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 12,
-  },
-  summaryCard: {
-    flex: 1,
-    height: 76,
-    borderRadius: 18,
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  summaryNumber: {
-    color: "#111827",
-    fontSize: 21,
-    fontWeight: "900",
-    marginBottom: 4,
-  },
-  summaryLabel: {
-    color: "#8a97a8",
-    fontSize: 11,
-    fontWeight: "800",
-  },
-  noticeCard: {
-    borderRadius: 18,
-    backgroundColor: "#eaf2ff",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
-    marginBottom: 14,
-  },
-  noticeTextGroup: {
-    flex: 1,
-  },
-  noticeTitle: {
-    color: "#1c4fba",
-    fontSize: 14,
-    fontWeight: "900",
-    marginBottom: 4,
-  },
-  noticeText: {
-    color: "#607697",
-    fontSize: 12,
-    fontWeight: "600",
-    lineHeight: 18,
-  },
-  filterRow: {
-    gap: 8,
-    paddingBottom: 6,
-  },
-  filterButton: {
-    height: 34,
-    borderRadius: 17,
-    paddingHorizontal: 14,
-    backgroundColor: "#ffffff",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  filterButtonActive: {
+  retryButton: {
+    minHeight: 40,
+    borderRadius: 20,
+    paddingHorizontal: 16,
     backgroundColor: "#397bf2",
+    justifyContent: "center",
+    marginTop: 12,
   },
-  filterText: {
-    color: "#607697",
-    fontSize: 13,
+  retryText: {
+    color: "#fff",
+    fontSize: 14,
     fontWeight: "800",
-  },
-  filterTextActive: {
-    color: "#ffffff",
   },
   sectionHeader: {
     flexDirection: "row",
@@ -490,6 +325,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   statusPill: {
+    backgroundColor: "#edf4ff",
+    marginLeft: 6,
     minHeight: 26,
     borderRadius: 13,
     flexDirection: "row",
@@ -498,6 +335,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   statusText: {
+    color: "#375778",
     fontSize: 11,
     fontWeight: "900",
   },
@@ -514,7 +352,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   footerTag: {
-    height: 28,
+    minHeight: 28,
     borderRadius: 14,
     backgroundColor: "#f5f8fc",
     justifyContent: "center",
@@ -524,24 +362,6 @@ const styles = StyleSheet.create({
     color: "#607697",
     fontSize: 11,
     fontWeight: "800",
-  },
-  riskTag: {
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    gap: 6,
-  },
-  riskDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-  },
-  riskText: {
-    fontSize: 11,
-    fontWeight: "900",
   },
   emptyCard: {
     minHeight: 190,
