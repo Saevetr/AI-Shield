@@ -262,7 +262,7 @@ export default function HomeScreen() {
           <View style={styles.advocacyHeader}>
             <View>
               <Text style={styles.advocacyTitle}>防詐宣導</Text>
-              <Text style={styles.advocacySubtitle}>165 公開宣導圖，每次進入自動更換</Text>
+              <Text style={styles.advocacySubtitle}>165 公開宣導圖</Text>
             </View>
 
             <View style={styles.sourceBadge}>
