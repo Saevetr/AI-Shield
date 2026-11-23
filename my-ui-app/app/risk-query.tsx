@@ -332,7 +332,7 @@ export default function RiskQueryScreen() {
         body: JSON.stringify({
           type: result.kind === "line" ? "LINE" : "PHONE",
           value: result.value,
-          reason: "使用者從風險查詢結果送出疑似詐騙通報，待後續查核。",
+          reason: "從風險查詢結果送出的疑似詐騙通報。",
           userId: currentUserId,
         }),
       });
@@ -347,7 +347,7 @@ export default function RiskQueryScreen() {
 
       Alert.alert(
         data.duplicate ? "已通報" : "通報成功",
-        data.duplicate ? "此項目已在你的個人通報紀錄中。" : "已送出通報，等待後續查核。",
+        data.duplicate ? "此項目已在你的個人通報紀錄中。" : "已送出通報，可在通報紀錄中查看。",
         [
           { text: "關閉", style: "cancel" },
           { text: "查看紀錄", onPress: () => router.push("/(tabs)/reports") },
