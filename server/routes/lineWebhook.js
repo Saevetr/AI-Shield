@@ -332,12 +332,13 @@ async function analyzeMedia(message) {
         true
     );
 
-    return formatAIReport(result);
+    return formatAIReport(result, message.type);
 }
 
 
 
-function formatAIReport(result) {
+
+function formatAIReport(result, mediaType) {
     const raw = result.data?.analysisReport;
 
     if (typeof raw !== "string" || !raw.trim()) {
@@ -349,22 +350,109 @@ function formatAIReport(result) {
         .replace(/\s*```$/, "")
         .trim();
 
-    try {
-        const data = JSON.parse(cleaned);
+    // 圖片分析：優先使用結構化 JSON
+    if (mediaType === "image") {
+        const candidates = [cleaned];
 
-        if (data && Array.isArray(data.signals)) {
-            return {
-                type: "imageAnalysis",
-                quote: data.quote,
-                alert: data.alert,
-                signals: data.signals,
-                summary: data.summary
-            };
+        // 移除 JSON 前後多餘的說明文字
+        const start = cleaned.indexOf("{");
+        const end = cleaned.lastIndexOf("}");
+
+        if (start !== -1 && end > start) {
+            const extracted = cleaned.slice(start, end + 1);
+
+            candidates.push(extracted);
+
+            // 修正 JSON 結尾多出的數字
+            // 例如 summary 字串後面多出 5
+            candidates.push(
+                extracted.replace(/"\s*\d+\s*}$/, '"}')
+            );
+
+            // 修正 JSON 最後多出的逗號
+            candidates.push(
+                extracted.replace(/,\s*}$/, "}")
+            );
         }
-    } catch {
-        // 非 JSON 格式，使用一般文字回覆
+
+        for (const candidate of candidates) {
+            try {
+                const data = JSON.parse(candidate);
+
+                if (
+                    !data ||
+                    typeof data.quote !== "string" ||
+                    typeof data.alert !== "string" ||
+                    typeof data.summary !== "string" ||
+                    !Array.isArray(data.signals)
+                ) {
+                    continue;
+                }
+
+                const expectedLabels = [
+                    "情緒勒索",
+                    "信任施壓",
+                    "金錢要求"
+                ];
+
+                const signals = expectedLabels.map(label => {
+                    const item = data.signals.find(
+                        signal => signal?.label === label
+                    );
+
+                    if (!item) {
+                        return null;
+                    }
+
+                    const score = Number(item.score);
+
+                    if (
+                        item.score === null ||
+                        item.score === "" ||
+                        !["number", "string"].includes(typeof item.score) ||
+                        !Number.isFinite(score) ||
+                        score < 0 ||
+                        score > 100
+                    ) {
+                        return null;
+                    }
+
+                    return {
+                        label,
+                        score: Math.round(score)
+                    };
+                });
+
+                // 不使用缺失或無效的風險分數
+                if (signals.some(signal => signal === null)) {
+                    continue;
+                }
+
+                return {
+                    type: "imageAnalysis",
+                    quote: data.quote.slice(0, 500),
+                    alert: data.alert.slice(0, 500),
+                    signals,
+                    summary: data.summary.slice(0, 1000)
+                };
+
+            } catch {
+                // 嘗試下一種 JSON 格式
+            }
+        }
+
+        // 解析失敗時，不顯示原始 JSON
+        console.warn("LINE 圖片分析格式解析失敗");
+
+        return (
+            "⚠️ 本次圖片分析結果格式異常，暫時無法完整顯示。\n\n" +
+            "請重新傳送圖片，再試一次。\n\n" +
+            "在確認安全之前，請勿匯款、點擊可疑連結或提供個人資料。\n\n" +
+            DISCLAIMER
+        );
     }
 
+    // 保留原本的一般文字及語音分析格式
     const report = cleaned
         .replace(/\*\*/g, "")
         .replace(/^#{1,6}\s*/gm, "")
@@ -375,6 +463,7 @@ function formatAIReport(result) {
     return report.slice(0, 3500) +
         "\n\n" + DISCLAIMER;
 }
+
 
 
 
