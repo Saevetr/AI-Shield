@@ -4,15 +4,24 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
+    "start:line": "node line-server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
-  },
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@google-cloud/speech": "^7.3.2",
+    "@google/genai": "^2.8.0",
+    "@line/bot-sdk": "^11.4.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "mssql": "^12.5.5",
+    "multer": "^2.2.0",
+    "mysql2": "^3.22.5",
+    "openai": "^6.42.0"
   }
 }
