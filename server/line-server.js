@@ -81,6 +81,92 @@ app.get("/", (req, res) => {
     res.send("AI Shield LINE Bot Running");
 });
 
+// APP 跳轉入口
+app.get("/open-app", (req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.type("html").send(`
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>麥騙 AI Shield</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            padding: 24px;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #F2F5ED;
+            font-family: -apple-system, sans-serif;
+            color: #285640;
+        }
+        .card {
+            background: #FFFFFF;
+            padding: 32px 24px;
+            border-radius: 24px;
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 8px 30px #0000000D;
+        }
+        .logo {
+            font-size: 56px;
+        }
+        h1 {
+            font-size: 26px;
+        }
+        p {
+            color: #64786B;
+            line-height: 1.8;
+            font-size: 15px;
+        }
+        .button {
+            display: block;
+            padding: 16px;
+            margin: 24px 0;
+            background: #367C5C;
+            color: white;
+            text-decoration: none;
+            border-radius: 14px;
+            font-weight: bold;
+        }
+        .note {
+            font-size: 13px;
+            background: #F2F5ED;
+            padding: 14px;
+            border-radius: 12px;
+        }
+    </style>
+</head>
+<body>
+    <main class="card">
+        <div class="logo">🛡️</div>
+        <h1>麥騙 AI Shield</h1>
+        <p>你的智慧防詐助手<br>守護每一通電話與訊息</p>
+
+        <a class="button" href="myuiapp://">
+            開啟麥騙 AI Shield APP
+        </a>
+
+        <p class="note">
+            請確認手機已安裝麥騙 AI Shield APP。<br>
+            若無法開啟，請使用 Safari 或手機的外部瀏覽器重試。
+        </p>
+
+        <p>尚未安裝 APP？<br>
+        你仍可返回 LINE 使用防詐助手。</p>
+    </main>
+</body>
+</html>
+    `);
+});
+
 app.get("/api/health", (req, res) => {
     res.json({
         success: true,

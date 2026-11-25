@@ -497,7 +497,9 @@ function getHelp() {
         "例如：LINE ID test123\n\n" +
         "🔗 網址查詢\n直接傳送可疑網址。\n\n" +
         "📚 防詐知識\n輸入「防詐知識」。\n\n" +
-        "請勿傳送密碼、驗證碼或敏感個資。" +
+        "📱 麥騙 AI Shield APP\n" +
+        "點選下方「開啟麥騙 APP」，體驗更多完整的防詐功能。\n\n" +
+        "請勿傳送密碼、驗證碼或敏感個資。\n" +
         "AI 分析內容將交由外部 AI 服務處理。"
     );
 }
@@ -752,9 +754,11 @@ function createFlex(title, content) {
                 contents: bodyContents
             },
 
+
             footer: {
                 type: "box",
                 layout: "vertical",
+                spacing: "sm",
                 contents: [
                     {
                         type: "button",
@@ -765,9 +769,21 @@ function createFlex(title, content) {
                             label: content?.type === "lookupResult" ? "再次查詢" : "查看使用說明",
                             text: content?.type === "lookupResult" ? content.command : "使用說明"
                         }
-                    }
-                ]
-            }
+                    },
+                    ...(title === "使用說明" ? [
+                        {
+                            type: "button",
+                            style: "secondary",
+                            action: {
+                                type: "uri",
+                                label: "開啟麥騙 APP",
+                                uri: "https://ai-shield-line-bot.onrender.com/open-app"
+                            }
+                        }
+        ] : [])
+    ]
+}
+
         }
     };
 }
@@ -1005,7 +1021,7 @@ async function handleEvent(event) {
         // 文字訊息
         } else if (message.type === "text") {
             const text = message.text.trim();
-                
+
         // 個人歡迎卡片測試
         if (
         text === "測試歡迎訊息" &&
