@@ -111,7 +111,13 @@ app.get(
       res.json(result);
 
     } catch (error) {
-      console.error("電話名單查詢失敗");
+      console.error("電話名單查詢失敗", {
+        name: error.name,
+        code: error.code,
+        number: error.number,
+        originalCode: error.originalError?.code,
+        originalNumber: error.originalError?.info?.number
+      });
 
       res.status(500).json({
         success: false,
