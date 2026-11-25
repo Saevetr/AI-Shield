@@ -113,6 +113,10 @@ app.get(
     } catch (error) {
       console.error("電話名單查詢失敗", {
         name: error.name,
+        message: error.message,
+        originalMessage: error.originalError?.message,
+        causeCode: error.cause?.code,
+        causeMessage: error.cause?.message,
         code: error.code,
         number: error.number,
         originalCode: error.originalError?.code,
