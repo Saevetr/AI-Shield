@@ -1,5 +1,6 @@
 
 const express = require("express");
+const sharp = require("sharp");
 const line = require("@line/bot-sdk");
 const fraudKnowledge = require("../data/fraudKnowledge");
 
@@ -82,6 +83,10 @@ const IMAGE_AI_PROMPT = `
 【輸出格式】
 
 只輸出有效的JSON，不要使用Markdown。
+quote：最多80字。
+alert：最多50字。
+summary：最多150字，直接說明評分依據與防範建議。
+避免重複敘述，不需要額外的開場白或結語。
 必須包含以下三項指標，不得增加或刪除。
 
 {
@@ -209,7 +214,11 @@ async function callAPI(endpoint, body, isForm = false) {
 
     const options = {
         headers,
-        signal: AbortSignal.timeout(20000)
+        signal: AbortSignal.timeout(
+            isForm && body?.has("scamImage")
+                ? 45000
+                : 20000
+        )
     };
 
     if (body !== undefined) {
@@ -302,12 +311,63 @@ async function analyzeMedia(message) {
             return "請傳送 JPG 或 PNG 格式的圖片。";
         }
 
+        let imageBuffer = buffer;
+        let imageMime = isPNG ? "image/png" : "image/jpeg";
+
+        try {
+            const startedAt = Date.now();
+
+            const metadata = await sharp(buffer, {
+                limitInputPixels: 40000000
+            }).metadata();
+
+            const longestSide = Math.max(
+                metadata.width || 0,
+                metadata.height || 0
+            );
+
+            if (longestSide > 1600) {
+                const optimized = await sharp(buffer, {
+                    limitInputPixels: 40000000
+                })
+                    .rotate()
+                    .resize({
+                        width: 1600,
+                        height: 1600,
+                        fit: "inside",
+                        withoutEnlargement: true
+                    })
+                    .flatten({ background: "#ffffff" })
+                    .jpeg({ quality: 85, chromaSubsampling: "4:4:4" })
+                    .toBuffer();
+
+                if (optimized.length < buffer.length) {
+                    imageBuffer = optimized;
+                    imageMime = "image/jpeg";
+                }
+            }
+
+            console.log("LINE 圖片預處理完成", {
+                originalKB: Math.round(buffer.length / 1024),
+                finalKB: Math.round(imageBuffer.length / 1024),
+                elapsedMs: Date.now() - startedAt
+            });
+
+        } catch (error) {
+            console.warn(
+                "LINE 圖片壓縮失敗，保留原圖",
+                error.name
+            );
+        }
+
         form.append(
             "scamImage",
-            new Blob([buffer], {
-                type: isPNG ? "image/png" : "image/jpeg",
+            new Blob([imageBuffer], {
+                type: imageMime
             }),
-            isPNG ? "line-image.png" : "line-image.jpg"
+            imageMime === "image/png"
+                ? "line-image.png"
+                : "line-image.jpg"
         );
     } else {
         form.append(
@@ -326,13 +386,28 @@ async function analyzeMedia(message) {
         : AI_PROMPT
 );
 
-    const result = await callAPI(
-        "/api/analyze-scam",
-        form,
-        true
-    );
+    const maxAttempts =
+        message.type === "image" ? 2 : 1;
 
-    return formatAIReport(result, message.type);
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const result = await callAPI(
+            "/api/analyze-scam",
+            form,
+            true
+        );
+
+        const report = formatAIReport(result, message.type);
+
+        if (
+            message.type !== "image" ||
+            report?.type === "imageAnalysis" ||
+            attempt === maxAttempts
+        ) {
+            return report;
+        }
+
+        console.warn("LINE 圖片格式異常，自動重試一次");
+    }
 }
 
 
@@ -1099,7 +1174,67 @@ async function handleEvent(event) {
         if (message.type === "image") {
             clearUserState(userId);
             title = "AI 圖片分析";
-            content = await analyzeMedia(message);
+
+            try {
+                await client.replyMessage({
+                    replyToken: event.replyToken,
+                    messages: [{
+                        type: "text",
+                        text: "📷 已收到您的圖片！AI 正在進行詐騙風險分析，請稍候。"
+                    }]
+                });
+            } catch (error) {
+                console.warn(
+                    "LINE 圖片等待通知傳送失敗",
+                    error.statusCode || error.name
+                );
+            }
+
+            try {
+                content = await analyzeMedia(message);
+            } catch (error) {
+                console.error(
+                    "LINE 圖片分析失敗",
+                    error.name
+                );
+
+                content =
+                    "⚠️ 圖片分析暫時無法完成，請稍後再試。";
+            }
+
+            try {
+                await client.pushMessage({
+                    to: userId,
+                    messages: [
+                        createFlex(title, content)
+                    ]
+                });
+
+                console.log("LINE 圖片分析結果推播成功");
+
+            } catch (error) {
+                console.error(
+                    "LINE 圖片分析卡片推播失敗",
+                    error.statusCode || error.name
+                );
+
+                try {
+                    await client.pushMessage({
+                        to: userId,
+                        messages: [{
+                            type: "text",
+                            text: "⚠️ 本次分析結果暫時無法顯示，請稍後再試。"
+                        }]
+                    });
+                } catch (pushError) {
+                    console.error(
+                        "LINE 圖片備援通知失敗",
+                        pushError.statusCode || pushError.name
+                    );
+                }
+            }
+
+            return;
 
         // 語音分析
         } else if (message.type === "audio") {

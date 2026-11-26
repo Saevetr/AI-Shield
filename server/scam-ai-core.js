@@ -56,6 +56,10 @@ async function analyzeScamAPI(req, res) {
 
     try {
         const scamText = req.body.text;
+
+        const isLineImage =
+            process.env.LINE_ONLY_MODE === "true" &&
+            Boolean(scamImageFile);
         
         // 準備本次請求的 Parts 陣列
         const currentParts = [];
@@ -63,7 +67,11 @@ async function analyzeScamAPI(req, res) {
         // 1. 處理圖片辨識
         if (scamImageFile) {
             const ext = path.extname(scamImageFile.path).toLowerCase();
-            const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
+            const mimeType = isLineImage
+                ? (scamImageFile.mimetype === 'image/png'
+                    ? 'image/png'
+                    : 'image/jpeg')
+                : (ext === '.png' ? 'image/png' : 'image/jpeg');
             
             const imagePart = fileToGenerativePart(scamImageFile.path, mimeType);
             currentParts.push(imagePart);
@@ -132,6 +140,54 @@ async function analyzeScamAPI(req, res) {
                     ? '你是台灣的防詐與心理操控線索分析助手。分析使用者提供的聊天截圖，只依照看得到的文字與情境，不要臆測。當請求要求 JSON 時，只輸出有效 JSON，不加 Markdown，格式為 {"quote":"最具代表性的原句，沒有則空字串","alert":"簡短風險提示","signals":[{"label":"情緒勒索","score":0},{"label":"信任施壓","score":0},{"label":"金錢要求","score":0}],"summary":"簡短說明依據與建議"}。score 是各心理操控線索的 0 到 100 指標，不是詐騙機率；依證據評分，沒有證據就給低分。'
                     : '你是台灣專業防詐專家。分析使用者提供的對話、圖片或語音，說明風險指標、核心警告原因及具體防範建議。只根據可見或提供的內容判斷，避免臆測。',
                 temperature: 0.2,
+                ...(isLineImage ? {
+                    ...(
+                        process.env.GEMINI_MODEL === "gemini-3.5-flash-lite"
+                            ? {
+                                thinkingConfig: {
+                                    thinkingLevel: "MINIMAL"
+                                }
+                            }
+                            : {}
+                    ),
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            quote: { type: "STRING" },
+                            alert: { type: "STRING" },
+                            signals: {
+                                type: "ARRAY",
+                                items: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        label: {
+                                            type: "STRING",
+                                            enum: [
+                                                "情緒勒索",
+                                                "信任施壓",
+                                                "金錢要求"
+                                            ]
+                                        },
+                                        score: {
+                                            type: "INTEGER",
+                                            minimum: 0,
+                                            maximum: 100
+                                        }
+                                    },
+                                    required: ["label", "score"]
+                                }
+                            },
+                            summary: { type: "STRING" }
+                        },
+                        required: [
+                            "quote",
+                            "alert",
+                            "signals",
+                            "summary"
+                        ]
+                    }
+                } : {}),
             }
         });
 
