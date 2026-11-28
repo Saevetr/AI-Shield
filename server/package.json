@@ -17,6 +17,7 @@
     "@google/genai": "^2.8.0",
     "@line/bot-sdk": "^11.4.0",
     "cors": "^2.8.6",
+    "csv-parse": "^7.0.3",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "mssql": "^12.5.5",
